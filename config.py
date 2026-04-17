@@ -315,7 +315,7 @@ GNEWS_API_KEY = os.environ.get("GNEWS_API_KEY", "")
 # ══════════════════════════════════════════════════════════════════════════════
 API_MAX_RETRIES          = 3
 API_INITIAL_DELAY        = 2     # seconds  (doubles each retry)
-API_CDN_WAIT_SECONDS     = 5     # wait after LinkedIn upload before posting
+API_CDN_WAIT_SECONDS     = 30    # wait after LinkedIn upload before posting (allow image processing)
 FIRST_COMMENT_DELAY_SECONDS = 45 # wait before posting first comment
 
 # Font filenames expected in FONTS_DIR (downloaded in setup)

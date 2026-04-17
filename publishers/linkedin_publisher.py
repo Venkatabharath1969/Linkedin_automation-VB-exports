@@ -241,17 +241,44 @@ def post_document(
 
     log.info("Posting via /rest/posts | author=%s | images=%d", urn, len(image_urns))
 
-    resp = _retry(
-        requests.post,
-        f"{BASE}/rest/posts",
-        headers=rest_headers,
-        json=body,
-        timeout=30,
-        verify=_VERIFY_SSL,
-    )
-    post_urn = resp.headers.get("x-restli-id", "")
-    log.info("LinkedIn post created: %s (%d images)", post_urn, len(image_urns))
-    return post_urn
+    try:
+        resp = _retry(
+            requests.post,
+            f"{BASE}/rest/posts",
+            headers=rest_headers,
+            json=body,
+            timeout=30,
+            verify=_VERIFY_SSL,
+        )
+        post_urn = resp.headers.get("x-restli-id", "")
+        log.info("LinkedIn post created: %s (%d images)", post_urn, len(image_urns))
+        return post_urn
+    except Exception as carousel_err:
+        # Fallback: post caption as text-only if carousel posting is blocked
+        log.warning("Image carousel post failed (%s) — falling back to text-only post", carousel_err)
+        text_body = {
+            "author":     urn,
+            "commentary": caption,
+            "visibility": "PUBLIC",
+            "distribution": {
+                "feedDistribution": "MAIN_FEED",
+                "targetEntities": [],
+                "thirdPartyDistributionChannels": [],
+            },
+            "lifecycleState": "PUBLISHED",
+            "isReshareDisabledByAuthor": False,
+        }
+        resp2 = _retry(
+            requests.post,
+            f"{BASE}/rest/posts",
+            headers=rest_headers,
+            json=text_body,
+            timeout=30,
+            verify=_VERIFY_SSL,
+        )
+        post_urn = resp2.headers.get("x-restli-id", "")
+        log.info("LinkedIn TEXT post created (carousel fallback): %s", post_urn)
+        return post_urn
 
 
 # ══════════════════════════════════════════════════════════════════════════════
