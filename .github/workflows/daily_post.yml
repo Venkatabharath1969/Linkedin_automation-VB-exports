@@ -62,7 +62,9 @@ jobs:
 
       # ── 5. Install Playwright browser (Chromium) ───────────────────────────
       - name: Install Playwright Chromium
-        run: python -m playwright install chromium --with-deps
+        run: |
+          python -m playwright install-deps chromium
+          python -m playwright install chromium
 
       # ── 6. Download fonts ──────────────────────────────────────────────────
       - name: Download fonts
