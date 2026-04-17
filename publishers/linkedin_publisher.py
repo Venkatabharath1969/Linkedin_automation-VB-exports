@@ -81,25 +81,49 @@ def _retry(fn, *args, **kwargs):
 # ══════════════════════════════════════════════════════════════════════════════
 
 def _upload_image(png_path: str, access_token: str, author_urn: str) -> str:
-    """Uploads a single PNG to LinkedIn. Returns image URN."""
-    headers = {
-        **HEADERS_BASE,
+    """
+    Uploads a single PNG to LinkedIn using the v2 assets API.
+    Returns asset URN (e.g. urn:li:digitalmediaAsset:...).
+    The v2 API is used because the REST /rest/images endpoint is blocked
+    from GitHub Actions IP ranges.
+    """
+    headers_v2 = {
         "Authorization": f"Bearer {access_token}",
-        "Content-Type":  "application/json",
+        "X-Restli-Protocol-Version": "2.0.0",
+        "Content-Type": "application/json",
     }
+
+    # Step 1: Register upload (v2 assets API)
     init_resp = _retry(
         requests.post,
-        f"{BASE}/rest/images",
-        params={"action": "initializeUpload"},
-        headers=headers,
-        json={"initializeUploadRequest": {"owner": author_urn}},
+        f"{BASE}/v2/assets",
+        params={"action": "registerUpload"},
+        headers=headers_v2,
+        json={
+            "registerUploadRequest": {
+                "recipes": ["urn:li:digitalmediaRecipe:feedshare-image"],
+                "owner": author_urn,
+                "serviceRelationships": [
+                    {"relationshipType": "OWNER", "identifier": "urn:li:userGeneratedContent"}
+                ],
+            }
+        },
         timeout=30,
         verify=_VERIFY_SSL,
     )
-    data       = init_resp.json()
-    upload_url = data["value"]["uploadUrl"]
-    image_urn  = data["value"]["image"]
+    data = init_resp.json()["value"]
+    upload_url = data["uploadMechanism"]["com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest"]["uploadUrl"]
+    asset_urn  = data["asset"] if "asset" in data else data.get("mediaArtifact", "").split(",")[0].lstrip("(")
 
+    # Extract clean asset URN from mediaArtifact if needed
+    media_artifact = data.get("mediaArtifact", "")
+    if "asset" not in data and media_artifact:
+        # Format: urn:li:digitalmediaMediaArtifact:(urn:li:digitalmediaAsset:...,...)
+        import re
+        m = re.search(r"(urn:li:digitalmediaAsset:[^,)]+)", media_artifact)
+        asset_urn = m.group(1) if m else media_artifact
+
+    # Step 2: Upload binary
     with open(png_path, "rb") as f:
         img_bytes = f.read()
     _retry(
@@ -110,8 +134,8 @@ def _upload_image(png_path: str, access_token: str, author_urn: str) -> str:
         timeout=120,
         verify=_VERIFY_SSL,
     )
-    log.info("  Uploaded %s (%d KB) → %s", pathlib.Path(png_path).name, len(img_bytes) // 1024, image_urn)
-    return image_urn
+    log.info("  Uploaded %s (%d KB) → %s", pathlib.Path(png_path).name, len(img_bytes) // 1024, asset_urn)
+    return asset_urn
 
 
 def _find_slide_pngs(pdf_path: str) -> list[str]:
@@ -153,47 +177,47 @@ def post_document(
     log.info("Waiting %ds for CDN propagation…", API_CDN_WAIT_SECONDS)
     time.sleep(API_CDN_WAIT_SECONDS)
 
-    headers = {
-        **HEADERS_BASE,
+    # Use v2 UGC Posts API — consistent with v2 asset upload
+    headers_v2 = {
         "Authorization": f"Bearer {access_token}",
-        "Content-Type":  "application/json",
+        "X-Restli-Protocol-Version": "2.0.0",
+        "Content-Type": "application/json",
     }
 
-    if len(image_urns) == 1:
-        content = {"media": {"id": image_urns[0], "altText": "Carousel slide"}}
-    else:
-        content = {
-            "multiImage": {
-                "images": [
-                    {"id": u, "altText": f"Slide {i + 1}"}
-                    for i, u in enumerate(image_urns)
-                ]
-            }
+    media_list = [
+        {
+            "status": "READY",
+            "description": {"text": f"Slide {i + 1}"},
+            "media": u,
+            "title": {"text": f"Slide {i + 1}"},
         }
+        for i, u in enumerate(image_urns)
+    ]
 
     body = {
-        "author":     urn,
-        "commentary": caption,
-        "visibility": "PUBLIC",
-        "distribution": {
-            "feedDistribution": "MAIN_FEED",
-            "targetEntities": [],
-            "thirdPartyDistributionChannels": [],
-        },
-        "content":        content,
+        "author": urn,
         "lifecycleState": "PUBLISHED",
-        "isReshareDisabledByAuthor": False,
+        "specificContent": {
+            "com.linkedin.ugc.ShareContent": {
+                "shareCommentary": {"text": caption},
+                "shareMediaCategory": "IMAGE",
+                "media": media_list,
+            }
+        },
+        "visibility": {
+            "com.linkedin.ugc.MemberNetworkVisibility": "PUBLIC"
+        },
     }
 
     resp = _retry(
         requests.post,
-        f"{BASE}/rest/posts",
-        headers=headers,
+        f"{BASE}/v2/ugcPosts",
+        headers=headers_v2,
         json=body,
         timeout=30,
         verify=_VERIFY_SSL,
     )
-    post_urn = resp.headers.get("x-restli-id", "")
+    post_urn = resp.headers.get("x-restli-id", "") or resp.json().get("id", "")
     log.info("LinkedIn post created: %s (%d images)", post_urn, len(image_urns))
     return post_urn
 
