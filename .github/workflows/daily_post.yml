@@ -76,68 +76,79 @@ jobs:
 
       - name: Resolve Webshare proxy and test LinkedIn access
         id: proxy
+        continue-on-error: true
         env:
           WS_USER: ${{ secrets.WEBSHARE_PROXY_USER }}
           WS_PASS: ${{ secrets.WEBSHARE_PROXY_PASS }}
         run: |
-          echo "=== Step 1: Get Webshare API token ==="
-          TOKEN=$(curl -s -X POST https://proxy.webshare.io/api/v2/token/ \
+          set +e  # Don't exit on error
+
+          echo "=== Step 1: Raw Webshare API token response ==="
+          RAW=$(curl -s -m 10 -X POST "https://proxy.webshare.io/api/v2/token/" \
             -H "Content-Type: application/json" \
-            -d "{\"username\":\"$WS_USER\",\"password\":\"$WS_PASS\"}" | python3 -c "import sys,json; print(json.load(sys.stdin).get('token','FAILED'))")
-          echo "Token: ${TOKEN:0:20}..."
+            -d "{\"username\":\"$WS_USER\",\"password\":\"$WS_PASS\"}")
+          echo "Raw: ${RAW:0:300}"
+          TOKEN=$(echo "$RAW" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('token','NONE'))" 2>/dev/null || echo "PARSE_FAILED")
+          echo "Token: ${TOKEN:0:25}..."
 
-          echo "=== Step 2: Get static proxy IPs ==="
-          PROXY_LIST=$(curl -s "https://proxy.webshare.io/api/v2/proxy/list/?mode=direct&page=1&page_size=5" \
-            -H "Authorization: Token $TOKEN")
-          echo "Proxy list response: $PROXY_LIST" | head -c 500
-
-          # Extract first proxy IP:PORT and credentials
-          PROXY_IP=$(echo "$PROXY_LIST" | python3 -c "
+          echo "=== Step 2: Get proxy list ==="
+          if [ "$TOKEN" != "NONE" ] && [ "$TOKEN" != "PARSE_FAILED" ]; then
+            LIST_RAW=$(curl -s -m 10 "https://proxy.webshare.io/api/v2/proxy/list/?mode=direct&page=1&page_size=3" \
+              -H "Authorization: Token $TOKEN")
+            echo "List: ${LIST_RAW:0:500}"
+            PROXY_IP=$(echo "$LIST_RAW" | python3 -c "
           import sys,json
           d=json.load(sys.stdin)
           r=d.get('results',[])
           if r:
               p=r[0]
-              print(f\"{p.get('proxy_address')}:{p.get('ports',{}).get('http',80)}\")
+              print(f\"{p['proxy_address']}:{p.get('ports',{}).get('http',80)}\")
           else:
-              print('NONE')
-          ")
-          PROXY_CRED=$(echo "$PROXY_LIST" | python3 -c "
+              print('NONE')" 2>/dev/null || echo "NONE")
+            PROXY_CRED=$(echo "$LIST_RAW" | python3 -c "
           import sys,json
           d=json.load(sys.stdin)
           r=d.get('results',[])
           if r:
               p=r[0]
-              print(f\"{p.get('username')}:{p.get('password')}\")
-          else:
-              print(':')
-          ")
-          echo "First proxy: $PROXY_IP  cred: ${PROXY_CRED%%:*}:***"
-
-          echo "=== Step 3: Test rotating proxy endpoint ==="
-          ROTATE_IP=$(curl -sv -x "http://$WS_USER:$WS_PASS@p.webshare.io:80" https://api.ipify.org 2>&1 | tail -5)
-          echo "Rotating proxy result: $ROTATE_IP"
-
-          echo "=== Step 4: Test static proxy ==="
-          if [ "$PROXY_IP" != "NONE" ]; then
-            STATIC_IP=$(curl -s -x "http://$PROXY_CRED@$PROXY_IP" https://api.ipify.org || echo "FAILED")
-            echo "Static proxy IP seen: $STATIC_IP"
-          fi
-
-          echo "=== Step 5: Test LinkedIn /rest/images directly (no proxy) ==="
-          DIRECT=$(curl -s -o /dev/null -w "%{http_code}" \
-            -X POST "https://api.linkedin.com/rest/images?action=initializeUpload" \
-            -H "LinkedIn-Version: 202503" \
-            -H "Content-Type: application/json" \
-            -d '{"initializeUploadRequest":{"owner":"urn:li:person:test"}}')
-          echo "Direct LinkedIn (no proxy): $DIRECT"
-
-          # Write resolved proxy to env for next step
-          if [ "$PROXY_IP" != "NONE" ]; then
-            echo "RESOLVED_PROXY=http://$PROXY_CRED@$PROXY_IP" >> $GITHUB_ENV
+              print(f\"{p.get('username','')}:{p.get('password','')}\")" 2>/dev/null || echo ":")
+            echo "Static proxy: $PROXY_IP  user: ${PROXY_CRED%%:*}"
           else
-            echo "RESOLVED_PROXY=http://$WS_USER:$WS_PASS@p.webshare.io:80" >> $GITHUB_ENV
+            PROXY_IP="NONE"
+            PROXY_CRED=":"
           fi
+
+          echo "=== Step 3: Test rotating proxy p.webshare.io:80 ==="
+          ROTATE=$(curl -s -m 15 -x "http://$WS_USER:$WS_PASS@p.webshare.io:80" "https://api.ipify.org" 2>&1 || echo "FAILED")
+          echo "Rotating proxy 80: $ROTATE"
+
+          echo "=== Step 4: Test rotating proxy p.webshare.io:8080 ==="
+          ROTATE2=$(curl -s -m 15 -x "http://$WS_USER:$WS_PASS@p.webshare.io:8080" "https://api.ipify.org" 2>&1 || echo "FAILED")
+          echo "Rotating proxy 8080: $ROTATE2"
+
+          echo "=== Step 5: Direct LinkedIn /rest/images (no proxy) ==="
+          DIRECT=$(curl -s -m 10 -o /dev/null -w "%{http_code}" \
+            -X POST "https://api.linkedin.com/rest/images?action=initializeUpload" \
+            -H "LinkedIn-Version: 202503" -H "Content-Type: application/json" \
+            -d '{"initializeUploadRequest":{"owner":"urn:li:person:test"}}')
+          echo "Direct LinkedIn (no proxy, no token): $DIRECT"
+
+          echo "=== Step 6: Resolve best proxy ==="
+          if echo "$ROTATE" | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$'; then
+            BEST="http://$WS_USER:$WS_PASS@p.webshare.io:80"
+            echo "Using rotating:80"
+          elif echo "$ROTATE2" | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$'; then
+            BEST="http://$WS_USER:$WS_PASS@p.webshare.io:8080"
+            echo "Using rotating:8080"
+          elif [ "$PROXY_IP" != "NONE" ]; then
+            BEST="http://$PROXY_CRED@$PROXY_IP"
+            echo "Using static: $PROXY_IP"
+          else
+            BEST=""
+            echo "No working proxy found"
+          fi
+
+          echo "RESOLVED_PROXY=$BEST" >> $GITHUB_ENV
 
       - name: Generate and post carousel
         env:
