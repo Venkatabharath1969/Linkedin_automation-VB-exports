@@ -85,11 +85,20 @@ _member_urn_cache: dict[str, str] = {}  # token → urn:li:member:<numericId>
 
 def _resolve_member_urn(access_token: str, person_urn: str) -> str:
     """
-    Returns the author URN in the format accepted by /v2/ugcPosts.
-    urn:li:person:<id> and urn:li:organization:<id> are both accepted.
-    urn:li:member:<numeric> is NOT accepted (gives 403).
-    Returns the input URN unchanged — it works directly.
+    Returns the author URN accepted by /v2/ugcPosts.
+
+    LinkedIn's v2 ugcPosts API requires urn:li:member:<numericId> or
+    urn:li:organization:<numericId> in some data centers (e.g. GitHub Actions
+    Azure East US), while accepting urn:li:person:<alphanumericId> in others.
+
+    Priority:
+      1. LINKEDIN_MEMBER_URN env var (pre-computed numeric URN)
+      2. person_urn as-is (works on local / some data centers)
     """
+    member_urn_override = os.environ.get("LINKEDIN_MEMBER_URN", "").strip()
+    if member_urn_override:
+        log.info("Using LINKEDIN_MEMBER_URN override: %s", member_urn_override)
+        return member_urn_override
     return person_urn
 
 

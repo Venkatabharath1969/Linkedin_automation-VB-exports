@@ -79,6 +79,7 @@ jobs:
           LINKEDIN_ACCESS_TOKEN:        ${{ secrets.LINKEDIN_ACCESS_TOKEN }}
           LINKEDIN_PERSON_URN:          ${{ secrets.LINKEDIN_PERSON_URN }}
           LINKEDIN_ORG_URN:             ${{ secrets.LINKEDIN_ORG_URN }}
+          LINKEDIN_MEMBER_URN:          ${{ secrets.LINKEDIN_MEMBER_URN }}
           LINKEDIN_CLIENT_ID:           ${{ secrets.LINKEDIN_CLIENT_ID }}
 
           # ── Google Gemini ──────────────────────────────────────────────────
