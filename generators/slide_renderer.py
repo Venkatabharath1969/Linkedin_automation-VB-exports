@@ -484,12 +484,8 @@ def render_carousel(
     with open(pdf_path, "wb") as f:
         f.write(pdf_bytes)
 
-    # Cleanup PNGs
-    for p in png_paths:
-        try:
-            pathlib.Path(p).unlink()
-        except Exception:
-            pass
+    # NOTE: PNGs are intentionally kept — linkedin_publisher uses them for
+    # the multi-image carousel post. They will be cleaned up after posting.
 
     size_mb = pathlib.Path(pdf_path).stat().st_size / 1_048_576
     log.info("PDF: %s (%.2f MB, %d slides)", pdf_path, size_mb, len(png_paths))
