@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8">
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;0,800;0,900;1,400;1,700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet">
+<script id="tailwind-config">
+  tailwind.config = {
+    theme: {
+      extend: {
+        fontFamily: {
+          headline: ["Playfair Display","Georgia","serif"],
+          body:     ["Inter","system-ui","sans-serif"]
+        }
+      }
+    }
+  }
+</script>
+<style>
+  .material-symbols-outlined { font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { width:1080px; height:1350px; overflow:hidden; }
+
+  /* ── Phase 5: Warmer forest green — #0C2216 base ── */
+  .slide-bg {
+    background:
+      radial-gradient(ellipse at 5%  5%,  rgba(30,85,58,0.90) 0%, transparent 40%),
+      radial-gradient(ellipse at 95% 92%, rgba(20,75,100,0.65) 0%, transparent 38%),
+      radial-gradient(ellipse at 50% 50%, #0C2216 0%, #071510 100%);
+  }
+
+  /* Subtle dot-grid texture */
+  .dot-grid {
+    position:absolute; inset:0; pointer-events:none;
+    background-image: radial-gradient(circle, rgba(255,255,255,0.04) 1px, transparent 1px);
+    background-size: 30px 30px;
+  }
+
+  /* ── Phase 5: More visible glass cards (0.10 opacity) ── */
+  .glass-card {
+    background: rgba(255,255,255,0.10);
+    border: 1px solid rgba(255,255,255,0.14);
+    box-shadow: 0 3px 20px rgba(0,0,0,0.30), inset 0 1px 0 rgba(255,255,255,0.08);
+    border-radius: 12px;
+    overflow: hidden;
+    position: relative;
+  }
+
+  /* ── Forward-pull teal highlight strip ── */
+  .fp-strip {
+    background: linear-gradient(135deg, rgba(45,191,191,0.14) 0%, rgba(20,110,110,0.07) 100%);
+    border: 1.5px solid rgba(45,191,191,0.30);
+    border-radius: 10px;
+    box-shadow: 0 2px 16px rgba(45,191,191,0.10);
+    flex-shrink: 0;
+  }
+
+  /* ── Phase 5: Gold gradient headline (all slide types) ── */
+  .headline-gradient {
+    background: linear-gradient(135deg, #F5F0E8 0%, #E2C46A 50%, #F5C842 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  /* ── Hero band for content slides (replaces photo) ── */
+  .hero-band {
+    background: linear-gradient(135deg,
+      rgba(30,85,58,0.95) 0%,
+      rgba(20,75,100,0.80) 50%,
+      rgba(13,43,30,0.95) 100%);
+    border-bottom: 1px solid rgba(45,191,191,0.18);
+    position: relative;
+    overflow: hidden;
+  }
+  .hero-band::before {
+    content:'';
+    position:absolute;
+    top:-30px; left:-30px;
+    width:280px; height:280px;
+    background: radial-gradient(circle, rgba(45,191,191,0.12) 0%, transparent 65%);
+    pointer-events:none;
+  }
+  .hero-band::after {
+    content:'';
+    position:absolute;
+    bottom:-20px; right:-20px;
+    width:220px; height:220px;
+    background: radial-gradient(circle, rgba(212,168,67,0.10) 0%, transparent 65%);
+    pointer-events:none;
+  }
+</style>
+</head>
+
+<body class="font-body flex flex-col slide-bg" style="width:1080px;height:1350px;overflow:hidden;position:relative;">
+
+  <!-- Dot grid texture -->
+  <div class="dot-grid"></div>
+
+  <!-- ════ HEADER ════ -->
+  <header class="flex items-center justify-between shrink-0 px-[52px] z-10 relative"
+          style="height:64px;border-bottom:1px solid rgba(255,255,255,0.08);background:rgba(6,18,12,0.90);">
+    <div class="flex items-center gap-3">
+      {% if logo_data_uri %}
+      <img src="{{ logo_data_uri }}" class="rounded-full object-cover shrink-0"
+           style="width:34px;height:34px;border:1.5px solid rgba(212,168,67,0.45);" alt="Bharath S">
+      {% endif %}
+      <span class="font-headline" style="font-size:17px;font-weight:700;color:#F0EDE6;letter-spacing:0.02em;">Bharath S</span>
+      <span class="font-body" style="font-size:13px;color:#7FB09A;padding-left:2px;">&middot; Coffee Exporter</span>
+    </div>
+    <span class="font-body" style="font-size:14px;color:#7FB09A;font-weight:500;">{{ slide_num }} / {{ total_slides }}</span>
+  </header>
+
+
+  {# ════════════════════════════════════════════════════
+     HOOK SLIDE (slide 1) — full photo hero
+  ════════════════════════════════════════════════════ #}
+  {% if is_hook %}
+  <div class="relative flex-1 flex flex-col min-h-0">
+
+    <!-- Phase 2: brightness 1.8, tint 0.22 -->
+    <div class="relative shrink-0 w-full" style="height:380px;overflow:hidden;">
+      <div class="absolute inset-0"
+           style="background-image:url('{{ photo_url }}');background-size:cover;
+                  background-position:{{ object_position }};
+                  filter:brightness(1.80) contrast(1.05) saturate(0.9);"></div>
+      <div class="absolute inset-0" style="background:rgba(10,45,28,0.22);"></div>
+      <div class="absolute inset-x-0 bottom-0"
+           style="height:180px;background:linear-gradient(to bottom,transparent 0%,rgba(12,34,22,0.80) 55%,#0C2216 100%);"></div>
+      <div class="absolute top-4 right-5 font-headline select-none"
+           style="font-size:88px;font-weight:900;color:rgba(255,255,255,0.04);line-height:1;">{{ '%02d' % slide_num }}</div>
+    </div>
+
+    <div class="flex-1 flex flex-col px-[52px] pb-4 min-h-0 relative z-10" style="margin-top:-22px;">
+
+      <!-- Teal badge -->
+      <div class="self-start rounded-full px-4 mb-4 shrink-0"
+           style="padding-top:5px;padding-bottom:5px;
+                  border:1.5px solid rgba(45,191,191,0.45);
+                  background:rgba(45,191,191,0.12);">
+        <span class="font-body uppercase"
+              style="font-size:10px;font-weight:700;letter-spacing:0.22em;color:#2DBFBF;">{{ badge_text }}</span>
+      </div>
+
+      <!-- Gold gradient headline -->
+      <h1 class="font-headline headline-gradient shrink-0 mb-4"
+          style="font-size:54px;font-weight:800;line-height:1.1;max-width:920px;">{{ headline }}</h1>
+
+      <!-- Stat pill — Phase 4: only show if not already in headline -->
+      {% if stat_number and stat_number | replace(',','') | replace(' ','') | replace('MT','') | replace('₹','') | replace('$','') not in headline | replace(',','') | replace(' ','') %}
+      <div class="self-start shrink-0 mb-4 rounded-2xl px-6 py-3"
+           style="background:rgba(212,168,67,0.13);border:1.5px solid rgba(212,168,67,0.35);
+                  box-shadow:0 4px 20px rgba(212,168,67,0.13);">
+        <span class="font-headline" style="font-size:38px;font-weight:800;color:#F5C842;line-height:1;">{{ stat_number }}</span>
+        {% if stat_label %}<span class="font-body" style="font-size:14px;color:#7FB09A;margin-left:12px;">{{ stat_label }}</span>{% endif %}
+      </div>
+      {% endif %}
+
+      <!-- Phase 3: body bullets (all except last = forward pull) -->
+      {% for bullet in bullets[:-1] %}
+      <p class="font-body shrink-0 mb-3"
+         style="font-size:18px;line-height:1.62;color:#C8DDD4;max-width:920px;">{{ bullet }}</p>
+      {% endfor %}
+
+      <!-- Forward pull — teal italic -->
+      {% if bullets %}
+      <p class="font-body shrink-0 mt-1"
+         style="font-size:17px;font-weight:500;font-style:italic;color:#2DBFBF;">{{ bullets[-1] }}</p>
+      {% endif %}
+
+      <!-- Swipe cue — bottom right -->
+      <div class="mt-auto shrink-0 flex items-center justify-end pt-3">
+        <span class="font-body uppercase"
+              style="font-size:11px;font-weight:700;letter-spacing:0.15em;color:rgba(45,191,191,0.60);">&rarr; Swipe for next story</span>
+      </div>
+    </div>
+  </div>
+
+
+  {# ════════════════════════════════════════════════════
+     CTA SLIDE (slide 9) — contact cards with photo
+  ════════════════════════════════════════════════════ #}
+  {% elif is_cta %}
+
+  <!-- Phase 2: brightness 1.8, tint 0.22 -->
+  <div class="relative shrink-0 w-full" style="height:300px;overflow:hidden;">
+    <div class="absolute inset-0"
+         style="background-image:url('{{ photo_url }}');background-size:cover;
+                background-position:{{ object_position }};
+                filter:brightness(1.80) contrast(1.05) saturate(0.9);"></div>
+    <div class="absolute inset-0" style="background:rgba(10,45,28,0.22);"></div>
+    <div class="absolute inset-x-0 bottom-0"
+         style="height:140px;background:linear-gradient(to bottom,transparent 0%,rgba(12,34,22,0.88) 60%,#0C2216 100%);"></div>
+  </div>
+
+  <main class="flex-1 flex flex-col px-[52px] pt-4 pb-3 min-h-0 relative z-10">
+
+    <!-- Teal badge -->
+    <div class="self-start rounded-full px-4 shrink-0 mb-3"
+         style="padding-top:5px;padding-bottom:5px;
+                border:1.5px solid rgba(45,191,191,0.45);background:rgba(45,191,191,0.12);">
+      <span class="font-body uppercase"
+            style="font-size:10px;font-weight:700;letter-spacing:0.22em;color:#2DBFBF;">{{ badge_text }}</span>
+    </div>
+
+    <!-- Gold gradient headline -->
+    <h1 class="font-headline headline-gradient shrink-0 mb-5"
+        style="font-size:46px;font-weight:800;line-height:1.1;">{{ headline }}</h1>
+
+    <!-- 4 contact cards evenly filling remaining space -->
+    <div class="flex flex-col flex-1 justify-evenly min-h-0" style="gap:8px;max-width:860px;">
+
+      <!-- LinkedIn -->
+      <div class="flex items-center gap-5 px-6 rounded-2xl"
+           style="padding-top:15px;padding-bottom:15px;
+                  background:rgba(10,102,194,0.18);border:1.5px solid rgba(10,102,194,0.40);
+                  box-shadow:0 4px 24px rgba(10,102,194,0.16);">
+        <svg style="width:28px;height:28px;flex-shrink:0;" viewBox="0 0 24 24" fill="#4A9EDB">
+          <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 0 1-2.063-2.065 2.064 2.064 0 1 1 2.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
+        </svg>
+        <div class="flex flex-col gap-0.5">
+          <span class="font-body uppercase" style="font-size:10px;font-weight:700;letter-spacing:0.15em;color:#4A9EDB;">DM ME ON LINKEDIN</span>
+          <span class="font-headline" style="font-size:17px;font-weight:700;color:#F0EDE6;">linkedin.com/in/bharath-s-672923383</span>
+        </div>
+      </div>
+
+      <!-- WhatsApp -->
+      <div class="flex items-center gap-5 px-6 rounded-2xl"
+           style="padding-top:15px;padding-bottom:15px;
+                  background:rgba(37,211,102,0.11);border:1.5px solid rgba(37,211,102,0.30);
+                  box-shadow:0 4px 24px rgba(37,211,102,0.09);">
+        <span class="material-symbols-outlined shrink-0" style="font-size:28px;color:#25D366;">phone</span>
+        <div class="flex flex-col gap-0.5">
+          <span class="font-body uppercase" style="font-size:10px;font-weight:700;letter-spacing:0.15em;color:#25D366;">CALL / WHATSAPP</span>
+          <span class="font-headline" style="font-size:20px;font-weight:700;color:#F0EDE6;">+91 9449522395</span>
+        </div>
+      </div>
+
+      <!-- Email -->
+      <div class="flex items-center gap-5 px-6 rounded-2xl"
+           style="padding-top:15px;padding-bottom:15px;
+                  background:rgba(212,168,67,0.11);border:1.5px solid rgba(212,168,67,0.30);
+                  box-shadow:0 4px 24px rgba(212,168,67,0.09);">
+        <span class="material-symbols-outlined shrink-0" style="font-size:28px;color:#D4A843;">mail</span>
+        <div class="flex flex-col gap-0.5">
+          <span class="font-body uppercase" style="font-size:10px;font-weight:700;letter-spacing:0.15em;color:#D4A843;">EMAIL</span>
+          <span class="font-headline" style="font-size:20px;font-weight:700;color:#F0EDE6;">info@vb-exports.com</span>
+        </div>
+      </div>
+
+      <!-- Website -->
+      <div class="flex items-center gap-5 px-6 rounded-2xl"
+           style="padding-top:15px;padding-bottom:15px;
+                  background:rgba(45,191,191,0.11);border:1.5px solid rgba(45,191,191,0.30);
+                  box-shadow:0 4px 24px rgba(45,191,191,0.09);">
+        <span class="material-symbols-outlined shrink-0" style="font-size:28px;color:#2DBFBF;">language</span>
+        <div class="flex flex-col gap-0.5">
+          <span class="font-body uppercase" style="font-size:10px;font-weight:700;letter-spacing:0.15em;color:#2DBFBF;">WEBSITE</span>
+          <span class="font-headline" style="font-size:20px;font-weight:700;color:#F0EDE6;">vb-exports.com</span>
+        </div>
+      </div>
+
+      <!-- Tagline -->
+      <div class="shrink-0 pt-3" style="border-top:1px solid rgba(255,255,255,0.10);">
+        <p class="font-body text-center"
+           style="font-size:15px;font-weight:400;font-style:italic;color:#7FB09A;">
+          I answer every sourcing question personally &mdash; DM me anytime.
+        </p>
+      </div>
+    </div>
+  </main>
+
+
+  {# ════════════════════════════════════════════════════
+     CONTENT SLIDES (2–8)
+     Phase 1: NO photo — decorative hero band instead
+     Phase 3: max 4 numbered cards + 1 fp-strip
+     Phase 4: stat shown only when not in headline
+     Phase 5: gold gradient headline
+  ════════════════════════════════════════════════════ #}
+  {% else %}
+
+  <!-- Phase 1: Decorative hero band (replaces black photo box) -->
+  <div class="hero-band shrink-0 w-full flex items-end px-[52px] pb-4" style="height:150px;position:relative;z-index:2;">
+    <!-- Giant watermark slide number -->
+    <div class="absolute top-0 right-6 font-headline select-none leading-none"
+         style="font-size:120px;font-weight:900;
+                color:rgba(255,255,255,0.05);line-height:1;bottom:0;display:flex;align-items:center;">
+      {{ '%02d' % slide_num }}
+    </div>
+    <!-- Teal accent line across top -->
+    <div class="absolute top-0 inset-x-0" style="height:3px;background:linear-gradient(to right,#2DBFBF,rgba(45,191,191,0.0));"></div>
+    <!-- Gold accent dash — left anchor -->
+    <div class="shrink-0 rounded-full" style="width:40px;height:4px;background:#D4A843;margin-bottom:2px;"></div>
+  </div>
+
+  <main class="flex-1 flex flex-col px-[52px] pt-4 pb-3 min-h-0 relative z-10">
+
+    <!-- Teal badge -->
+    <div class="self-start rounded-full px-4 shrink-0 mb-3"
+         style="padding-top:5px;padding-bottom:5px;
+                border:1.5px solid rgba(45,191,191,0.40);background:rgba(45,191,191,0.10);">
+      <span class="font-body uppercase"
+            style="font-size:10px;font-weight:700;letter-spacing:0.22em;color:#2DBFBF;">{{ badge_text }}</span>
+    </div>
+
+    <!-- Phase 5: Gold gradient headline on content slides -->
+    <h1 class="font-headline headline-gradient shrink-0 mb-2"
+        style="font-size:{{ headline_size }}px;font-weight:800;line-height:1.1;max-width:920px;">{{ headline }}</h1>
+
+    <!-- Gold accent divider -->
+    <div class="shrink-0 mb-3 rounded-full"
+         style="width:52px;height:3px;background:linear-gradient(to right,#D4A843,rgba(212,168,67,0.08));"></div>
+
+    <!-- Phase 4: Stat — only if NOT already in headline text -->
+    {% set headline_stripped = headline | replace(',','') | replace(' ','') | replace('MT','') | replace('₹','') | replace('$','') | replace('.','') %}
+    {% set stat_stripped = stat_number | replace(',','') | replace(' ','') | replace('MT','') | replace('₹','') | replace('$','') | replace('.','') if stat_number else '' %}
+    {% if stat_number and stat_stripped and stat_stripped not in headline_stripped %}
+    <div class="self-start shrink-0 mb-3 px-5 py-3 rounded-xl"
+         style="background:rgba(212,168,67,0.10);border:1.5px solid rgba(212,168,67,0.28);
+                box-shadow:0 3px 20px rgba(212,168,67,0.10);">
+      <span class="font-headline" style="font-size:{{ '44px' if slide_type in ('STAT','INSIGHT','GROWTH') else '32px' }};font-weight:800;color:#F5C842;line-height:1;">{{ stat_number }}</span>
+      {% if stat_label %}<div class="font-body" style="font-size:13px;color:#7FB09A;margin-top:3px;">{{ stat_label }}</div>{% endif %}
+    </div>
+    {% endif %}
+
+    <!-- Phase 3: Numbered glass cards — max 4 body bullets, then fp-strip -->
+    <div class="flex flex-col flex-1 min-h-0" style="max-width:976px;gap:6px;">
+
+      {% for bullet in bullets[:4] %}
+        {% set is_odd = loop.index % 2 == 1 %}
+        {% set bar_col  = 'linear-gradient(to bottom,#D4A843,rgba(212,168,67,0.18))' if is_odd else 'linear-gradient(to bottom,#2DBFBF,rgba(45,191,191,0.15))' %}
+        {% set num_bg   = 'rgba(212,168,67,0.16)' if is_odd else 'rgba(45,191,191,0.14)' %}
+        {% set num_bdr  = 'rgba(212,168,67,0.38)' if is_odd else 'rgba(45,191,191,0.35)' %}
+        {% set num_col  = '#D4A843'               if is_odd else '#2DBFBF' %}
+        {% set glow     = 'rgba(212,168,67,0.38)' if is_odd else 'rgba(45,191,191,0.32)' %}
+
+        <div class="glass-card flex-1 flex items-center min-h-0" style="padding:0 18px 0 0;">
+          <!-- Left accent bar — 5px, full height -->
+          <div class="shrink-0 self-stretch" style="width:5px;background:{{ bar_col }};border-radius:11px 0 0 11px;margin-right:14px;"></div>
+          <!-- Numbered badge — 44px with glow -->
+          <div class="shrink-0 flex items-center justify-center rounded-full"
+               style="width:44px;height:44px;flex-shrink:0;
+                      background:{{ num_bg }};border:2px solid {{ num_bdr }};margin-right:14px;
+                      box-shadow:0 0 12px {{ glow }};">
+            <span class="font-body" style="font-size:13px;font-weight:700;color:{{ num_col }};">{{ '%02d' % loop.index }}</span>
+          </div>
+          <!-- Bullet text — bright enough to read on dark bg -->
+          <span class="font-body flex-1"
+                style="font-size:17px;line-height:1.58;color:#D2E6DC;
+                       display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden;">{{ bullet }}</span>
+        </div>
+      {% endfor %}
+
+      <!-- Forward pull strip — always last, teal highlight -->
+      {% if bullets %}
+      <div class="fp-strip flex items-center gap-3 px-5 py-4">
+        <span class="font-body shrink-0"
+              style="font-size:17px;font-weight:700;color:#2DBFBF;">&rarr;</span>
+        <span class="font-body"
+              style="font-size:16px;font-weight:500;font-style:italic;color:#2DBFBF;line-height:1.5;">{{ bullets[-1] }}</span>
+      </div>
+      {% endif %}
+
+    </div>
+  </main>
+  {% endif %}
+
+
+  <!-- ════ FOOTER ════ -->
+  <footer class="shrink-0 flex items-center justify-between px-[52px] relative z-10"
+          style="height:90px;border-top:1px solid rgba(255,255,255,0.08);background:rgba(5,15,10,0.94);">
+    <div class="flex items-center gap-4">
+      {% if logo_data_uri %}
+      <img src="{{ logo_data_uri }}" class="rounded-full object-cover shrink-0"
+           style="width:40px;height:40px;border:1.5px solid rgba(212,168,67,0.35);" alt="Bharath S">
+      <div class="shrink-0" style="width:1px;height:28px;background:rgba(255,255,255,0.12);"></div>
+      {% endif %}
+      <div class="flex flex-col justify-center gap-0.5">
+        <p class="font-headline" style="font-size:15px;font-weight:700;color:#F0EDE6;">Bharath S</p>
+        <p class="font-body" style="font-size:12px;color:#7FB09A;">Coffee Exporter &middot; Karnataka, India</p>
+      </div>
+    </div>
+    <div class="flex flex-col items-end justify-center gap-1.5">
+      <div class="flex items-center gap-2">
+        <span class="material-symbols-outlined" style="font-size:14px;color:#2DBFBF;">language</span>
+        <span class="font-body" style="font-size:13px;color:#7FB09A;">vb-exports.com</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="material-symbols-outlined" style="font-size:14px;color:#D4A843;">phone</span>
+        <span class="font-body" style="font-size:13px;color:#7FB09A;">+91 9449522395</span>
+      </div>
+    </div>
+  </footer>
+
+</body></html>

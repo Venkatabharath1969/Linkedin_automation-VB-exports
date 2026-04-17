@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8">
+<style>
+  @import url("https://fonts.googleapis.com/css2?family=Oswald:wght@400;600;700&family=Montserrat:wght@300;400;500;600;700&display=swap");
+  * { margin:0; padding:0; box-sizing:border-box; }
+
+  body {
+    width:1080px; height:1350px; overflow:hidden;
+    background:{{ theme.bg }};
+    font-family:'Montserrat',sans-serif;
+    display:flex; flex-direction:column;
+  }
+
+  .brand-bar {
+    flex:0 0 70px; display:flex; align-items:center;
+    justify-content:space-between; padding:0 52px;
+    border-bottom:1px solid {{ theme.accent }}35;
+    position:relative; overflow:hidden;
+  }
+  .brand-bar::after {
+    content:''; position:absolute; right:-30px; top:-30px;
+    width:130px; height:130px; border-radius:50%;
+    background:radial-gradient(circle, {{ theme.accent }}18 0%, transparent 70%);
+    pointer-events:none;
+  }
+  .brand-left { display:flex; align-items:center; gap:12px; }
+  .brand-logo { width:34px; height:34px; border-radius:50%; object-fit:cover; flex-shrink:0; }
+  .brand-name { font-family:'Oswald',sans-serif; font-weight:700; font-size:19px; color:{{ theme.accent }}; letter-spacing:0.3px; }
+  .slide-counter { font-size:13px; color:{{ theme.text_muted }}; letter-spacing:0.5px; }
+
+  .photo-zone { flex:0 0 310px; position:relative; overflow:hidden; }
+  .photo-zone img {
+    width:100%; height:100%; object-fit:cover;
+    object-position:{{ object_position }}; display:block;
+    filter:brightness(1.0) contrast(1.18) saturate(0.85);
+  }
+  .photo-tint {
+    position:absolute; inset:0;
+    background:rgba(5,15,26,0.34);
+  }
+  .photo-grad {
+    position:absolute; bottom:0; left:0; right:0; height:200px;
+    background:linear-gradient(to bottom, transparent 0%, {{ theme.bg }}bb 55%, {{ theme.bg }} 100%);
+  }
+  .photo-num {
+    position:absolute; top:18px; right:24px;
+    font-family:'Oswald',sans-serif; font-size:72px; font-weight:700;
+    color:rgba(255,255,255,0.06); line-height:1; pointer-events:none;
+  }
+
+  .content {
+    flex:1; display:flex; flex-direction:column;
+    padding:20px 52px 16px; min-height:0;
+  }
+
+  .badge {
+    display:inline-flex; align-items:center;
+    height:24px; border:1px solid {{ theme.accent }}70;
+    border-radius:12px; padding:0 14px; margin-bottom:12px;
+    background:{{ theme.accent }}0f; width:fit-content; flex-shrink:0;
+  }
+  .badge-txt { font-size:10px; font-weight:700; color:{{ theme.accent }}; letter-spacing:2.5px; text-transform:uppercase; }
+
+  .headline {
+    font-family:'Oswald',sans-serif; font-weight:700;
+    font-size:{{ headline_size }}px; color:#FFFFFF;
+    line-height:1.12; margin-bottom:12px; flex-shrink:0;
+    text-shadow:0 0 40px rgba(74,158,219,0.30), 0 2px 18px rgba(0,0,0,0.75);
+  }
+
+  .divider {
+    width:52px; height:3px; border-radius:2px;
+    background:linear-gradient(to right, {{ theme.accent }}, {{ theme.accent }}30);
+    margin-bottom:14px; flex-shrink:0;
+  }
+
+  .stat-box {
+    background:{{ theme.accent }}0e;
+    backdrop-filter:blur(16px);
+    border:1px solid {{ theme.accent }}30;
+    border-radius:10px;
+    padding:14px 20px;
+    margin-bottom:14px; flex-shrink:0;
+    box-shadow:0 8px 32px {{ theme.accent }}0f, inset 0 1px 0 rgba(255,255,255,0.05);
+  }
+  .stat-num {
+    font-family:'Oswald',sans-serif; font-weight:700; font-size:50px; line-height:1;
+    background:linear-gradient(135deg, {{ theme.accent }} 0%, #B8E0FF 100%);
+    -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text;
+  }
+  .stat-lbl { font-size:13px; color:{{ theme.text_muted }}; margin-top:4px; font-weight:500; }
+
+  .bullets { list-style:none; flex:1; display:flex; flex-direction:column; gap:3px; padding-bottom:0; }
+  .bullets li {
+    flex:1; display:flex; align-items:center; gap:12px;
+    padding:8px 16px; border-radius:7px;
+    overflow:hidden; min-height:0;
+  }
+  .bullets li:nth-child(1) { background:linear-gradient(90deg, {{ theme.accent }}18 0%, transparent 55%); border-left:3px solid {{ theme.accent }}; }
+  .bullets li:nth-child(2) { background:linear-gradient(90deg, {{ theme.accent }}12 0%, transparent 55%); border-left:3px solid {{ theme.accent }}cc; }
+  .bullets li:nth-child(3) { background:linear-gradient(90deg, {{ theme.accent }}0d 0%, transparent 55%); border-left:3px solid {{ theme.accent }}99; }
+  .bullets li:nth-child(4) { background:linear-gradient(90deg, {{ theme.accent }}09 0%, transparent 55%); border-left:3px solid {{ theme.accent }}77; }
+  .bullets li:nth-child(5) { background:linear-gradient(90deg, {{ theme.accent }}06 0%, transparent 55%); border-left:3px solid {{ theme.accent }}55; }
+  .bullets li:nth-child(6) { background:linear-gradient(90deg, {{ theme.accent }}03 0%, transparent 55%); border-left:3px solid {{ theme.accent }}33; }
+  .btxt {
+    font-size:19px; color:{{ theme.text_muted }}; line-height:1.55;
+    display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:3;
+    overflow:hidden; word-break:break-word;
+  }
+  .bullets::after {
+    content:'→  Swipe for next insight';
+    display:flex; align-items:center;
+    font-size:13px; font-weight:700; letter-spacing:0.8px;
+    color:{{ theme.accent }}55;
+    height:32px; display:flex; align-items:center; justify-content:flex-end;
+    border-top:1px dashed {{ theme.accent }}25;
+    flex-shrink:0;
+  }
+
+  .footer {
+    flex:0 0 110px; display:flex; align-items:center;
+    padding:0 52px; gap:18px;
+    border-top:1px solid {{ theme.accent }}20;
+    background:linear-gradient(to right, {{ theme.bg }}, {{ theme.bg }}f5);
+    flex-shrink:0;
+  }
+  .footer-logo { height:44px; width:44px; border-radius:50%; object-fit:cover; flex-shrink:0; }
+  .footer-div  { width:1px; height:32px; background:{{ theme.accent }}40; flex-shrink:0; }
+  .footer-text { display:flex; flex-direction:column; gap:3px; }
+  .footer-l1   { font-weight:600; font-size:14px; color:#FFFFFF; letter-spacing:0.2px; }
+  .footer-l2   { font-weight:400; font-size:13px; color:{{ theme.accent }}; }
+</style></head>
+<body>
+
+  <div class="brand-bar">
+    <div class="brand-left">
+      {% if logo_data_uri %}<img class="brand-logo" src="{{ logo_data_uri }}" alt="">{% endif %}
+      <span class="brand-name">VB EXPORTS</span>
+    </div>
+    <span class="slide-counter">{{ slide_num }} / {{ total_slides }}</span>
+  </div>
+
+  <div class="photo-zone">
+    <img src="{{ photo_url }}" alt="">
+    <div class="photo-tint"></div>
+    <div class="photo-grad"></div>
+    <div class="photo-num">{{ slide_num }}</div>
+  </div>
+
+  <div class="content">
+    <div class="badge"><span class="badge-txt">{{ badge_text }}</span></div>
+    <div class="headline">{{ headline }}</div>
+    <div class="divider"></div>
+
+    {% if stat_number %}
+    <div class="stat-box">
+      <div class="stat-num">{{ stat_number }}</div>
+      {% if stat_label %}<div class="stat-lbl">{{ stat_label }}</div>{% endif %}
+    </div>
+    {% endif %}
+
+    <ul class="bullets">
+      {% for bullet in bullets %}
+      <li><span class="btxt">{{ bullet }}</span></li>
+      {% endfor %}
+    </ul>
+  </div>
+
+  <div class="footer">
+    {% if logo_data_uri %}<img class="footer-logo" src="{{ logo_data_uri }}" alt="VB Exports"><div class="footer-div"></div>{% endif %}
+    <div class="footer-text">
+      <span class="footer-l1">{{ footer.line1 }}</span>
+      <span class="footer-l2">{{ footer.line2 }}</span>
+    </div>
+  </div>
+
+</body></html>
+  .brand-name { font-family:'Oswald',sans-serif; font-weight:700; font-size:22px; color:{{ theme.text_primary }}; letter-spacing:0.3px; word-spacing:-1px; }
+  .slide-counter { font-size:15px; color:{{ theme.accent }}; opacity:0.7; }
+
+  .photo-zone { position:absolute; top:72px; left:0; right:0; height:380px; overflow:hidden; }
+  .photo-zone img { width:100%; height:100%; object-fit:cover; object-position:center 60%; display:block; }
+  .photo-grad { position:absolute; bottom:0; left:0; right:0; height:200px; background:linear-gradient(to bottom,transparent,{{ theme.bg }}); }
+
+  /* Data grid 2×2 */
+  .data-grid { position:absolute; top:420px; left:48px; right:48px; display:grid; grid-template-columns:1fr 1fr; gap:0; background:{{ theme.bg2 }}; border:1px solid {{ theme.accent }}20; border-radius:8px; overflow:hidden; }
+  .data-cell { padding:24px 28px; border-right:1px solid {{ theme.accent }}15; border-bottom:1px solid {{ theme.accent }}15; }
+  .data-cell:nth-child(2n) { border-right:none; }
+  .data-cell:nth-child(3), .data-cell:nth-child(4) { border-bottom:none; }
+  .cell-val { font-family:'Oswald',sans-serif; font-weight:700; font-size:40px; color:{{ theme.accent }}; line-height:1; }
+  .cell-lbl { font-size:14px; color:{{ theme.text_muted }}; margin-top:6px; }
+
+  .label { position:absolute; top:640px; left:48px; font-size:11px; font-weight:600; color:{{ theme.accent }}; letter-spacing:3px; text-transform:uppercase; }
+  .headline { position:absolute; top:662px; left:48px; right:48px; font-family:'Oswald',sans-serif; font-weight:700; font-size:{{ headline_size }}px; color:{{ theme.text_primary }}; line-height:1.18; }
+
+  .bullets { position:absolute; top:880px; left:48px; right:48px; list-style:none; }
+  .bullets li { display:flex; align-items:flex-start; gap:16px; margin-bottom:14px; }
+  .arrow { font-family:'Oswald',sans-serif; font-size:22px; color:{{ theme.accent }}; flex-shrink:0; margin-top:2px; }
+  .btxt { font-size:21px; color:{{ theme.text_muted }}; line-height:1.6; }
+  
+  .footer { position:absolute; bottom:0; left:0; right:0; height:135px;
+    background:{{ theme.bg }}; border-top:1px solid {{ theme.accent }}40;
+    display:flex; align-items:center; padding:0 48px; gap:20px; }
+  .footer-logo { height:48px; width:48px; border-radius:50%; object-fit:cover; flex-shrink:0; }
+  .footer-div  { width:1px; height:38px; background:{{ theme.accent }}50; flex-shrink:0; }
+  .footer-text { display:flex; flex-direction:column; gap:4px; }
+  .footer-l1   { font-weight:600; font-size:15px; color:{{ theme.text_primary }}; }
+  .footer-l2   { font-weight:300; font-size:14px; color:{{ theme.accent }}; }
+
+</style></head>
+<body>
+  <div class="brand-bar">
+    <span class="brand-name">VB EXPORTS</span>
+    <span class="slide-counter">{{ slide_num }} / {{ total_slides }}</span>
+  </div>
+  <div class="photo-zone"><img src="{{ photo_url }}" alt=""><div class="photo-grad"></div></div>
+
+  {% set grid_items = data_grid if data_grid else [
+    {'value': stat_number or '€2.3B', 'label': 'EU Import Market'},
+    {'value': '↑18%', 'label': 'YoY Growth'},
+    {'value': 'EUDR 2025', 'label': 'Key Compliance'},
+    {'value': '#3', 'label': "India's EU Rank"}
+  ] %}
+  <div class="data-grid">
+    {% for item in grid_items[:4] %}
+    <div class="data-cell">
+      <div class="cell-val">{{ item.value }}</div>
+      <div class="cell-lbl">{{ item.label }}</div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <div class="label">{{ theme.badge_text }}</div>
+  <div class="headline">{{ headline }}</div>
+  <ul class="bullets">
+    {% for bullet in bullets[:3] %}<li><div class="arrow">→</div><span class="btxt">{{ bullet }}</span></li>{% endfor %}
+  </ul>
+  
+  <div class="footer">
+    {% if logo_data_uri %}<img class="footer-logo" src="{{ logo_data_uri }}" alt="VB Exports"><div class="footer-div"></div>{% endif %}
+    <div class="footer-text">
+      <span class="footer-l1">{{ footer.line1 }}</span>
+      <span class="footer-l2">{{ footer.line2 }}</span>
+    </div>
+  </div>
+
+</body></html>

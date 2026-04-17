@@ -1,0 +1,31 @@
+# VB Exports Automation Agent — Dependencies
+# Install: pip install -r requirements.txt
+
+# ── AI / LLM ──────────────────────────────────────────────────────────────────
+google-genai>=1.5.0               # Gemini API new SDK (free tier, no credit card)
+
+# ── HTTP & APIs ───────────────────────────────────────────────────────────────
+requests>=2.31.0
+feedparser>=6.0.11                # RSS feed parsing (ET, BSL, economic news)
+
+# ── PDF Carousel Generation ───────────────────────────────────────────────────
+reportlab>=4.2.0                  # PDF generation (legacy / kept for fallback)
+Pillow>=10.3.0                    # Primary carousel renderer (Pillow-based v2)
+img2pdf>=0.5.1                    # PNG → PDF assembly (high-quality carousel)
+matplotlib>=3.8.0                 # Charts embedded in slides
+pymupdf>=1.24.0                   # PDF → PNG extraction (Facebook / Instagram)
+
+# ── Google Sheets (Topic Queue) ───────────────────────────────────────────────
+gspread>=6.1.2
+google-auth>=2.29.0
+
+# ── Image Hosting (Instagram requires public HTTPS URLs) ─────────────────────
+cloudinary>=1.40.0                # Cloudinary free tier (25 GB bandwidth/mo)
+
+# ── Utilities ────────────────────────────────────────────────────────────────
+python-dotenv>=1.0.0              # Load .env in local dev
+pytz>=2024.1                      # Timezone handling (IST)
+PyNaCl>=1.5.0                     # GitHub Secrets encryption (token refresh)
+
+# ── Font Download (run setup_fonts.py once) ──────────────────────────────────
+# Montserrat font is auto-downloaded from Google Fonts in setup_fonts.py

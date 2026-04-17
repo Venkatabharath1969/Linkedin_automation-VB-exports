@@ -1,0 +1,43 @@
+# ── Secrets & credentials ─────────────────────────────────────────────────────
+.env
+service_account.json
+auth/token*.json
+auth/token*.pickle
+*.pem
+*.key
+
+# ── Generated output ──────────────────────────────────────────────────────────
+output/
+*.pdf
+
+# ── Photo / logo caches (large binaries, re-downloaded at runtime) ────────────
+assets/photo_cache/
+assets/avatar_*.jpg
+assets/vb_logo_circle.png
+assets/vb_logo_cache.jpg
+
+# ── Fonts (downloaded by setup_fonts.py, not committed) ──────────────────────
+assets/fonts/*.ttf
+assets/fonts/*.woff2
+
+# ── Python ───────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+dist/
+build/
+*.egg
+.eggs/
+.venv/
+venv/
+env/
+.Python
+
+# ── IDE ───────────────────────────────────────────────────────────────────────
+.vscode/settings.json
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db

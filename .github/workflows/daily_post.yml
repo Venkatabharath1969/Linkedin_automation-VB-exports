@@ -1,0 +1,136 @@
+name: VB Exports — Daily Carousel Post
+
+on:
+  schedule:
+    # ── Optimal posting times based on international buyer timezones ──────
+    # Target buyers: EU (CET=UTC+1), UAE (GST=UTC+4), USA-East (EST=UTC-5)
+    # Best window that covers all three: 08:00 CET = 11:00 UAE = 03:00 EST
+    # That is 07:00 UTC. Run personal at 07:00, company at 07:30.
+    #
+    # Personal account  (Mon, Wed, Fri) — 07:00 UTC = 12:30 IST
+    - cron: "0 7 * * 1,3,5"
+    # Company account   (Tue, Thu)      — 07:30 UTC = 13:00 IST
+    - cron: "30 7 * * 2,4"
+
+  # Manual trigger — choose account + dry-run
+  workflow_dispatch:
+    inputs:
+      account:
+        description: "Account to post as"
+        required: true
+        default: "personal"
+        type: choice
+        options: ["personal", "company"]
+      dry_run:
+        description: "Dry run (generate PDF but do NOT post)"
+        required: false
+        default: "false"
+        type: choice
+        options: ["false", "true"]
+
+jobs:
+  post-carousel:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      # ── 1. Checkout ────────────────────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ── 2. Python setup ────────────────────────────────────────────────────
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      # ── 3. System dependencies ─────────────────────────────────────────────
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            poppler-utils libfontconfig1 \
+            libnss3 libatk1.0-0 libatk-bridge2.0-0 \
+            libcups2 libdrm2 libxkbcommon0 libxcomposite1 \
+            libxdamage1 libxfixes3 libxrandr2 libgbm1 libasound2
+
+      # ── 4. Python dependencies ─────────────────────────────────────────────
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+
+      # ── 5. Install Playwright browser (Chromium) ───────────────────────────
+      - name: Install Playwright Chromium
+        run: python -m playwright install chromium --with-deps
+
+      # ── 6. Download fonts ──────────────────────────────────────────────────
+      - name: Download fonts
+        run: python setup_fonts.py
+
+      # ── 7. Determine which account to run ──────────────────────────────────
+      # Cron runs are auto-detected by weekday inside main.py.
+      # Manual workflow_dispatch passes --account explicitly.
+      - name: Generate and post carousel
+        env:
+          # ── LinkedIn ───────────────────────────────────────────────────────
+          LINKEDIN_ACCESS_TOKEN:        ${{ secrets.LINKEDIN_ACCESS_TOKEN }}
+          LINKEDIN_PERSON_URN:          ${{ secrets.LINKEDIN_PERSON_URN }}
+          LINKEDIN_ORG_URN:             ${{ secrets.LINKEDIN_ORG_URN }}
+
+          # ── Google Gemini ──────────────────────────────────────────────────
+          GEMINI_API_KEY:               ${{ secrets.GEMINI_API_KEY }}
+
+          # ── Google Sheets (topic queue) ───────────────────────────────────
+          GOOGLE_SHEET_ID:              ${{ secrets.GOOGLE_SHEET_ID }}
+          GOOGLE_SHEETS_CREDS:          ${{ secrets.GOOGLE_SHEETS_CREDS }}
+
+          # ── Facebook — PERSONAL account ────────────────────────────────────
+          PERSONAL_FACEBOOK_PAGE_ID:    ${{ secrets.PERSONAL_FACEBOOK_PAGE_ID }}
+          PERSONAL_FACEBOOK_TOKEN:      ${{ secrets.PERSONAL_FACEBOOK_TOKEN }}
+          PERSONAL_INSTAGRAM_USER_ID:   ${{ secrets.PERSONAL_INSTAGRAM_USER_ID }}
+
+          # ── Facebook — COMPANY account ─────────────────────────────────────
+          FACEBOOK_PAGE_ID:             ${{ secrets.FACEBOOK_PAGE_ID }}
+          FACEBOOK_ACCESS_TOKEN:        ${{ secrets.FACEBOOK_ACCESS_TOKEN }}
+          INSTAGRAM_USER_ID:            ${{ secrets.INSTAGRAM_USER_ID }}
+
+          # ── Cloudinary (Instagram image hosting — free tier) ───────────────
+          CLOUDINARY_CLOUD_NAME:        ${{ secrets.CLOUDINARY_CLOUD_NAME }}
+          CLOUDINARY_API_KEY:           ${{ secrets.CLOUDINARY_API_KEY }}
+          CLOUDINARY_API_SECRET:        ${{ secrets.CLOUDINARY_API_SECRET }}
+
+          # ── Optional APIs ──────────────────────────────────────────────────
+          PEXELS_API_KEY:               ${{ secrets.PEXELS_API_KEY }}
+          GNEWS_API_KEY:                ${{ secrets.GNEWS_API_KEY }}
+          DATA_GOV_API_KEY:             ${{ secrets.DATA_GOV_API_KEY }}
+
+          # ── GitHub token (for artifact upload) ────────────────────────────
+          GITHUB_TOKEN:                 ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPO:                  ${{ github.repository }}
+
+          # ── Playwright: use Chromium (no Edge on ubuntu-latest) ───────────
+          PLAYWRIGHT_BROWSER:           chromium
+
+        run: |
+          # For manual dispatch: use the chosen account
+          # For cron: pass no --account so main.py auto-detects by weekday
+          ACCOUNT_FLAG=""
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            ACCOUNT_FLAG="--account ${{ github.event.inputs.account }}"
+          fi
+
+          DRY_FLAG=""
+          if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
+            DRY_FLAG="--dry-run"
+          fi
+
+          python main.py $ACCOUNT_FLAG $DRY_FLAG
+
+      # ── 8. Upload PDF + caption for inspection ─────────────────────────────
+      - name: Upload carousel output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: carousel-output-${{ github.run_number }}
+          path: output/
+          retention-days: 14
