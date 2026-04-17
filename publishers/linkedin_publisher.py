@@ -80,6 +80,19 @@ def _retry(fn, *args, **kwargs):
 # Image upload helpers + multi-image carousel post
 # ══════════════════════════════════════════════════════════════════════════════
 
+_member_urn_cache: dict[str, str] = {}  # token → urn:li:member:<numericId>
+
+
+def _resolve_member_urn(access_token: str, person_urn: str) -> str:
+    """
+    Returns the author URN in the format accepted by /v2/ugcPosts.
+    urn:li:person:<id> and urn:li:organization:<id> are both accepted.
+    urn:li:member:<numeric> is NOT accepted (gives 403).
+    Returns the input URN unchanged — it works directly.
+    """
+    return person_urn
+
+
 def _upload_image(png_path: str, access_token: str, author_urn: str) -> str:
     """
     Uploads a single PNG to LinkedIn using the v2 assets API.
@@ -113,12 +126,12 @@ def _upload_image(png_path: str, access_token: str, author_urn: str) -> str:
     )
     data = init_resp.json()["value"]
     upload_url = data["uploadMechanism"]["com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest"]["uploadUrl"]
-    asset_urn  = data["asset"] if "asset" in data else data.get("mediaArtifact", "").split(",")[0].lstrip("(")
 
-    # Extract clean asset URN from mediaArtifact if needed
+    # Extract clean asset URN
     media_artifact = data.get("mediaArtifact", "")
-    if "asset" not in data and media_artifact:
-        # Format: urn:li:digitalmediaMediaArtifact:(urn:li:digitalmediaAsset:...,...)
+    if "asset" in data:
+        asset_urn = data["asset"]
+    else:
         import re
         m = re.search(r"(urn:li:digitalmediaAsset:[^,)]+)", media_artifact)
         asset_urn = m.group(1) if m else media_artifact
@@ -163,11 +176,14 @@ def post_document(
     if not urn:
         raise ValueError("LinkedIn author URN not configured (LINKEDIN_PERSON_URN or LINKEDIN_ORG_URN)")
 
+    # v2 UGC API requires urn:li:member:<numericId> or urn:li:organization:<numericId>
+    ugc_urn = _resolve_member_urn(access_token, urn)
+
     slide_pngs = _find_slide_pngs(pdf_path)
     if not slide_pngs:
         raise RuntimeError(f"No slide PNGs found alongside {pdf_path}")
 
-    log.info("Uploading %d slide images to LinkedIn…", len(slide_pngs))
+    log.info("Uploading %d slide images to LinkedIn (author: %s)…", len(slide_pngs), ugc_urn)
     image_urns: list[str] = []
     for i, png in enumerate(slide_pngs, 1):
         log.info("  Slide %d/%d", i, len(slide_pngs))
@@ -195,7 +211,7 @@ def post_document(
     ]
 
     body = {
-        "author": urn,
+        "author": ugc_urn,
         "lifecycleState": "PUBLISHED",
         "specificContent": {
             "com.linkedin.ugc.ShareContent": {
@@ -208,6 +224,8 @@ def post_document(
             "com.linkedin.ugc.MemberNetworkVisibility": "PUBLIC"
         },
     }
+
+    log.info("Posting to /v2/ugcPosts | author=%s | images=%d", ugc_urn, len(image_urns))
 
     resp = _retry(
         requests.post,
