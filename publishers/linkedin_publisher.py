@@ -157,7 +157,10 @@ def _upload_image(png_path: str, access_token: str, author_urn: str) -> str:
         verify=_VERIFY_SSL,
     )
     log.info("  Uploaded %s (%d KB) → %s", pathlib.Path(png_path).name, len(img_bytes) // 1024, asset_urn)
-    return asset_urn
+    # Convert digitalmediaAsset URN → image URN (same ID, REST API prefix)
+    image_urn = asset_urn.replace("urn:li:digitalmediaAsset:", "urn:li:image:")
+    log.info("  Image URN for REST API: %s", image_urn)
+    return image_urn
 
 
 def _find_slide_pngs(pdf_path: str) -> list[str]:
@@ -202,49 +205,51 @@ def post_document(
     log.info("Waiting %ds for CDN propagation…", API_CDN_WAIT_SECONDS)
     time.sleep(API_CDN_WAIT_SECONDS)
 
-    # Use v2 UGC Posts API — consistent with v2 asset upload
-    headers_v2 = {
+    # Use /rest/posts (accepts urn:li:person: and urn:li:image: — works from GitHub Actions)
+    # image_urns are already in urn:li:image: format (converted in _upload_image)
+    rest_headers = {
+        **HEADERS_BASE,
         "Authorization": f"Bearer {access_token}",
-        "X-Restli-Protocol-Version": "2.0.0",
         "Content-Type": "application/json",
     }
 
-    media_list = [
-        {
-            "status": "READY",
-            "description": {"text": f"Slide {i + 1}"},
-            "media": u,
-            "title": {"text": f"Slide {i + 1}"},
+    if len(image_urns) == 1:
+        content = {"media": {"id": image_urns[0], "altText": "Carousel slide 1"}}
+    else:
+        content = {
+            "multiImage": {
+                "images": [
+                    {"id": u, "altText": f"Slide {i + 1}"}
+                    for i, u in enumerate(image_urns)
+                ]
+            }
         }
-        for i, u in enumerate(image_urns)
-    ]
 
     body = {
-        "author": ugc_urn,
+        "author":     urn,
+        "commentary": caption,
+        "visibility": "PUBLIC",
+        "distribution": {
+            "feedDistribution": "MAIN_FEED",
+            "targetEntities": [],
+            "thirdPartyDistributionChannels": [],
+        },
+        "content":        content,
         "lifecycleState": "PUBLISHED",
-        "specificContent": {
-            "com.linkedin.ugc.ShareContent": {
-                "shareCommentary": {"text": caption},
-                "shareMediaCategory": "IMAGE",
-                "media": media_list,
-            }
-        },
-        "visibility": {
-            "com.linkedin.ugc.MemberNetworkVisibility": "PUBLIC"
-        },
+        "isReshareDisabledByAuthor": False,
     }
 
-    log.info("Posting to /v2/ugcPosts | author=%s | images=%d", ugc_urn, len(image_urns))
+    log.info("Posting via /rest/posts | author=%s | images=%d", urn, len(image_urns))
 
     resp = _retry(
         requests.post,
-        f"{BASE}/v2/ugcPosts",
-        headers=headers_v2,
+        f"{BASE}/rest/posts",
+        headers=rest_headers,
         json=body,
         timeout=30,
         verify=_VERIFY_SSL,
     )
-    post_urn = resp.headers.get("x-restli-id", "") or resp.json().get("id", "")
+    post_urn = resp.headers.get("x-restli-id", "")
     log.info("LinkedIn post created: %s (%d images)", post_urn, len(image_urns))
     return post_urn
 
