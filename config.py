@@ -285,7 +285,7 @@ GOOGLE_SHEET_ID = os.environ.get(
 )
 
 # --- LinkedIn ---
-LINKEDIN_API_VERSION = "202504"
+LINKEDIN_API_VERSION = "202503"
 LINKEDIN_PERSON_URN  = os.environ.get("LINKEDIN_PERSON_URN", "")
 LINKEDIN_ORG_URN     = os.environ.get("LINKEDIN_ORG_URN", "")   # company page URN
 # Post on behalf of the company page if ORG_URN is set, else personal profile
