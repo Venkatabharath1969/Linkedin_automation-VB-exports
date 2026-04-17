@@ -127,7 +127,8 @@ jobs:
             DRY_FLAG="--dry-run"
           fi
 
-          python main.py $ACCOUNT_FLAG $DRY_FLAG
+          python main.py $ACCOUNT_FLAG $DRY_FLAG 2>&1 | tee output/run_log.txt
+          exit ${PIPESTATUS[0]}
 
       # ── 8. Upload PDF + caption for inspection ─────────────────────────────
       - name: Upload carousel output
