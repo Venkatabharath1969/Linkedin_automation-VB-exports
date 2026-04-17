@@ -127,6 +127,7 @@ jobs:
             DRY_FLAG="--dry-run"
           fi
 
+          mkdir -p output
           python main.py $ACCOUNT_FLAG $DRY_FLAG 2>&1 | tee output/run_log.txt
           exit ${PIPESTATUS[0]}
 

@@ -10,6 +10,7 @@ feedparser>=6.0.11                # RSS feed parsing (ET, BSL, economic news)
 
 # ── PDF Carousel Generation ───────────────────────────────────────────────────
 playwright>=1.44.0                # Headless browser — HTML→PNG slide rendering
+jinja2>=3.1.4                     # HTML template rendering (slide templates)
 reportlab>=4.2.0                  # PDF generation (legacy / kept for fallback)
 Pillow>=10.3.0                    # Primary carousel renderer (Pillow-based v2)
 img2pdf>=0.5.1                    # PNG → PDF assembly (high-quality carousel)
