@@ -213,10 +213,6 @@ def main(dry_run: bool = False, account_key: str | None = None, category_overrid
 
     # ── 2. LinkedIn token + expiry check ──────────────────────────────────
     _separator("STEP 2 — LinkedIn token")
-    person_urn_env = os.environ.get("LINKEDIN_PERSON_URN", "")
-    org_urn_env    = os.environ.get("LINKEDIN_ORG_URN", "")
-    log.info("PERSON_URN type: %s len=%d", person_urn_env.split(":")[2] if person_urn_env.count(":") >= 2 else "EMPTY", len(person_urn_env))
-    log.info("ORG_URN    type: %s len=%d", org_urn_env.split(":")[2] if org_urn_env.count(":") >= 2 else "EMPTY", len(org_urn_env))
     if dry_run:
         access_token = DRY_RUN_TOKEN
         log.info("DRY RUN — using fake token")

@@ -82,6 +82,10 @@ jobs:
           LINKEDIN_MEMBER_URN:          ${{ secrets.LINKEDIN_MEMBER_URN }}
           LINKEDIN_CLIENT_ID:           ${{ secrets.LINKEDIN_CLIENT_ID }}
 
+          # ── Webshare proxy (routes LinkedIn API through non-Azure IP) ──────
+          HTTPS_PROXY:  http://${{ secrets.WEBSHARE_PROXY_USER }}:${{ secrets.WEBSHARE_PROXY_PASS }}@p.webshare.io:80
+          HTTP_PROXY:   http://${{ secrets.WEBSHARE_PROXY_USER }}:${{ secrets.WEBSHARE_PROXY_PASS }}@p.webshare.io:80
+
           # ── Google Gemini ──────────────────────────────────────────────────
           GEMINI_API_KEY:               ${{ secrets.GEMINI_API_KEY }}
 

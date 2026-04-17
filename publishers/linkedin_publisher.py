@@ -80,86 +80,45 @@ def _retry(fn, *args, **kwargs):
 # Image upload helpers + multi-image carousel post
 # ══════════════════════════════════════════════════════════════════════════════
 
-_member_urn_cache: dict[str, str] = {}  # token → urn:li:member:<numericId>
-
-
-def _resolve_member_urn(access_token: str, person_urn: str) -> str:
-    """
-    Returns the author URN accepted by /v2/ugcPosts.
-
-    LinkedIn's v2 ugcPosts API requires urn:li:member:<numericId> or
-    urn:li:organization:<numericId> in some data centers (e.g. GitHub Actions
-    Azure East US), while accepting urn:li:person:<alphanumericId> in others.
-
-    Priority:
-      1. LINKEDIN_MEMBER_URN env var (pre-computed numeric URN)
-      2. person_urn as-is (works on local / some data centers)
-    """
-    member_urn_override = os.environ.get("LINKEDIN_MEMBER_URN", "").strip()
-    if member_urn_override:
-        log.info("Using LINKEDIN_MEMBER_URN override: %s", member_urn_override)
-        return member_urn_override
-    return person_urn
-
-
 def _upload_image(png_path: str, access_token: str, author_urn: str) -> str:
     """
-    Uploads a single PNG to LinkedIn using the v2 assets API.
-    Returns asset URN (e.g. urn:li:digitalmediaAsset:...).
-    The v2 API is used because the REST /rest/images endpoint is blocked
-    from GitHub Actions IP ranges.
-    """
-    headers_v2 = {
-        "Authorization": f"Bearer {access_token}",
-        "X-Restli-Protocol-Version": "2.0.0",
-        "Content-Type": "application/json",
-    }
+    Uploads a single PNG via /rest/images and returns urn:li:image:<id>.
 
-    # Step 1: Register upload (v2 assets API)
+    Requests are routed through the HTTPS_PROXY env var (set to Webshare in
+    GitHub Actions) so LinkedIn's API sees a non-Azure IP.  On local the env
+    var is absent and the direct connection is used.
+    """
+    # Step 1 — initialize upload
     init_resp = _retry(
         requests.post,
-        f"{BASE}/v2/assets",
-        params={"action": "registerUpload"},
-        headers=headers_v2,
-        json={
-            "registerUploadRequest": {
-                "recipes": ["urn:li:digitalmediaRecipe:feedshare-image"],
-                "owner": author_urn,
-                "serviceRelationships": [
-                    {"relationshipType": "OWNER", "identifier": "urn:li:userGeneratedContent"}
-                ],
-            }
+        f"{BASE}/rest/images",
+        params={"action": "initializeUpload"},
+        headers={
+            **HEADERS_BASE,
+            "Authorization": f"Bearer {access_token}",
+            "Content-Type": "application/json",
         },
+        json={"initializeUploadRequest": {"owner": author_urn}},
         timeout=30,
         verify=_VERIFY_SSL,
     )
-    data = init_resp.json()["value"]
-    upload_url = data["uploadMechanism"]["com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest"]["uploadUrl"]
+    value      = init_resp.json()["value"]
+    upload_url = value["uploadUrl"]
+    image_urn  = value["image"]          # urn:li:image:<id>
 
-    # Extract clean asset URN
-    media_artifact = data.get("mediaArtifact", "")
-    if "asset" in data:
-        asset_urn = data["asset"]
-    else:
-        import re
-        m = re.search(r"(urn:li:digitalmediaAsset:[^,)]+)", media_artifact)
-        asset_urn = m.group(1) if m else media_artifact
-
-    # Step 2: Upload binary
+    # Step 2 — upload binary (direct to LinkedIn CDN — proxy not needed here)
     with open(png_path, "rb") as f:
         img_bytes = f.read()
     _retry(
         requests.put,
         upload_url,
         data=img_bytes,
-        headers={"Authorization": f"Bearer {access_token}", "Content-Type": "image/png"},
+        headers={"Content-Type": "application/octet-stream"},
         timeout=120,
         verify=_VERIFY_SSL,
     )
-    log.info("  Uploaded %s (%d KB) → %s", pathlib.Path(png_path).name, len(img_bytes) // 1024, asset_urn)
-    # Convert digitalmediaAsset URN → image URN (same ID, REST API prefix)
-    image_urn = asset_urn.replace("urn:li:digitalmediaAsset:", "urn:li:image:")
-    log.info("  Image URN for REST API: %s", image_urn)
+    log.info("  Uploaded %s (%d KB) → %s",
+             pathlib.Path(png_path).name, len(img_bytes) // 1024, image_urn)
     return image_urn
 
 
@@ -179,8 +138,9 @@ def post_document(
     author_urn: Optional[str] = None,
 ) -> str:
     """
-    Uploads slide PNGs and creates a LinkedIn multi-image carousel post.
-    (Uses /rest/images — only requires w_member_social, no Documents API approval needed.)
+    Uploads slide PNGs via /rest/images and creates a multi-image carousel
+    post via /rest/posts.  Both calls are automatically routed through the
+    HTTPS_PROXY env var (Webshare) when running on GitHub Actions.
 
     Returns the created post URN.
     """
@@ -188,14 +148,12 @@ def post_document(
     if not urn:
         raise ValueError("LinkedIn author URN not configured (LINKEDIN_PERSON_URN or LINKEDIN_ORG_URN)")
 
-    # v2 UGC API requires urn:li:member:<numericId> or urn:li:organization:<numericId>
-    ugc_urn = _resolve_member_urn(access_token, urn)
-
     slide_pngs = _find_slide_pngs(pdf_path)
     if not slide_pngs:
         raise RuntimeError(f"No slide PNGs found alongside {pdf_path}")
 
-    log.info("Uploading %d slide images to LinkedIn (author: %s)…", len(slide_pngs), ugc_urn)
+    log.info("Uploading %d slide images via /rest/images (author: %s)…",
+             len(slide_pngs), urn)
     image_urns: list[str] = []
     for i, png in enumerate(slide_pngs, 1):
         log.info("  Slide %d/%d", i, len(slide_pngs))
@@ -205,18 +163,16 @@ def post_document(
     log.info("Waiting %ds for CDN propagation…", API_CDN_WAIT_SECONDS)
     time.sleep(API_CDN_WAIT_SECONDS)
 
-    # Use /rest/posts (accepts urn:li:person: and urn:li:image: — works from GitHub Actions)
-    # image_urns are already in urn:li:image: format (converted in _upload_image)
     rest_headers = {
         **HEADERS_BASE,
         "Authorization": f"Bearer {access_token}",
         "Content-Type": "application/json",
     }
 
-    if len(image_urns) == 1:
-        content = {"media": {"id": image_urns[0], "altText": "Carousel slide 1"}}
-    else:
-        content = {
+    content = (
+        {"media": {"id": image_urns[0], "altText": "Carousel slide 1"}}
+        if len(image_urns) == 1
+        else {
             "multiImage": {
                 "images": [
                     {"id": u, "altText": f"Slide {i + 1}"}
@@ -224,6 +180,7 @@ def post_document(
                 ]
             }
         }
+    )
 
     body = {
         "author":     urn,
@@ -239,46 +196,18 @@ def post_document(
         "isReshareDisabledByAuthor": False,
     }
 
-    log.info("Posting via /rest/posts | author=%s | images=%d", urn, len(image_urns))
-
-    try:
-        resp = _retry(
-            requests.post,
-            f"{BASE}/rest/posts",
-            headers=rest_headers,
-            json=body,
-            timeout=30,
-            verify=_VERIFY_SSL,
-        )
-        post_urn = resp.headers.get("x-restli-id", "")
-        log.info("LinkedIn post created: %s (%d images)", post_urn, len(image_urns))
-        return post_urn
-    except Exception as carousel_err:
-        # Fallback: post caption as text-only if carousel posting is blocked
-        log.warning("Image carousel post failed (%s) — falling back to text-only post", carousel_err)
-        text_body = {
-            "author":     urn,
-            "commentary": caption,
-            "visibility": "PUBLIC",
-            "distribution": {
-                "feedDistribution": "MAIN_FEED",
-                "targetEntities": [],
-                "thirdPartyDistributionChannels": [],
-            },
-            "lifecycleState": "PUBLISHED",
-            "isReshareDisabledByAuthor": False,
-        }
-        resp2 = _retry(
-            requests.post,
-            f"{BASE}/rest/posts",
-            headers=rest_headers,
-            json=text_body,
-            timeout=30,
-            verify=_VERIFY_SSL,
-        )
-        post_urn = resp2.headers.get("x-restli-id", "")
-        log.info("LinkedIn TEXT post created (carousel fallback): %s", post_urn)
-        return post_urn
+    log.info("Posting via /rest/posts | author=%s | slides=%d", urn, len(image_urns))
+    resp = _retry(
+        requests.post,
+        f"{BASE}/rest/posts",
+        headers=rest_headers,
+        json=body,
+        timeout=30,
+        verify=_VERIFY_SSL,
+    )
+    post_urn = resp.headers.get("x-restli-id", "")
+    log.info("LinkedIn carousel post created: %s", post_urn)
+    return post_urn
 
 
 # ══════════════════════════════════════════════════════════════════════════════
