@@ -73,6 +73,72 @@ jobs:
       # ── 7. Determine which account to run ──────────────────────────────────
       # Cron runs are auto-detected by weekday inside main.py.
       # Manual workflow_dispatch passes --account explicitly.
+
+      - name: Resolve Webshare proxy and test LinkedIn access
+        id: proxy
+        env:
+          WS_USER: ${{ secrets.WEBSHARE_PROXY_USER }}
+          WS_PASS: ${{ secrets.WEBSHARE_PROXY_PASS }}
+        run: |
+          echo "=== Step 1: Get Webshare API token ==="
+          TOKEN=$(curl -s -X POST https://proxy.webshare.io/api/v2/token/ \
+            -H "Content-Type: application/json" \
+            -d "{\"username\":\"$WS_USER\",\"password\":\"$WS_PASS\"}" | python3 -c "import sys,json; print(json.load(sys.stdin).get('token','FAILED'))")
+          echo "Token: ${TOKEN:0:20}..."
+
+          echo "=== Step 2: Get static proxy IPs ==="
+          PROXY_LIST=$(curl -s "https://proxy.webshare.io/api/v2/proxy/list/?mode=direct&page=1&page_size=5" \
+            -H "Authorization: Token $TOKEN")
+          echo "Proxy list response: $PROXY_LIST" | head -c 500
+
+          # Extract first proxy IP:PORT and credentials
+          PROXY_IP=$(echo "$PROXY_LIST" | python3 -c "
+          import sys,json
+          d=json.load(sys.stdin)
+          r=d.get('results',[])
+          if r:
+              p=r[0]
+              print(f\"{p.get('proxy_address')}:{p.get('ports',{}).get('http',80)}\")
+          else:
+              print('NONE')
+          ")
+          PROXY_CRED=$(echo "$PROXY_LIST" | python3 -c "
+          import sys,json
+          d=json.load(sys.stdin)
+          r=d.get('results',[])
+          if r:
+              p=r[0]
+              print(f\"{p.get('username')}:{p.get('password')}\")
+          else:
+              print(':')
+          ")
+          echo "First proxy: $PROXY_IP  cred: ${PROXY_CRED%%:*}:***"
+
+          echo "=== Step 3: Test rotating proxy endpoint ==="
+          ROTATE_IP=$(curl -sv -x "http://$WS_USER:$WS_PASS@p.webshare.io:80" https://api.ipify.org 2>&1 | tail -5)
+          echo "Rotating proxy result: $ROTATE_IP"
+
+          echo "=== Step 4: Test static proxy ==="
+          if [ "$PROXY_IP" != "NONE" ]; then
+            STATIC_IP=$(curl -s -x "http://$PROXY_CRED@$PROXY_IP" https://api.ipify.org || echo "FAILED")
+            echo "Static proxy IP seen: $STATIC_IP"
+          fi
+
+          echo "=== Step 5: Test LinkedIn /rest/images directly (no proxy) ==="
+          DIRECT=$(curl -s -o /dev/null -w "%{http_code}" \
+            -X POST "https://api.linkedin.com/rest/images?action=initializeUpload" \
+            -H "LinkedIn-Version: 202503" \
+            -H "Content-Type: application/json" \
+            -d '{"initializeUploadRequest":{"owner":"urn:li:person:test"}}')
+          echo "Direct LinkedIn (no proxy): $DIRECT"
+
+          # Write resolved proxy to env for next step
+          if [ "$PROXY_IP" != "NONE" ]; then
+            echo "RESOLVED_PROXY=http://$PROXY_CRED@$PROXY_IP" >> $GITHUB_ENV
+          else
+            echo "RESOLVED_PROXY=http://$WS_USER:$WS_PASS@p.webshare.io:80" >> $GITHUB_ENV
+          fi
+
       - name: Generate and post carousel
         env:
           # ── LinkedIn ───────────────────────────────────────────────────────
@@ -83,8 +149,8 @@ jobs:
           LINKEDIN_CLIENT_ID:           ${{ secrets.LINKEDIN_CLIENT_ID }}
 
           # ── Webshare proxy (routes LinkedIn API through non-Azure IP) ──────
-          HTTPS_PROXY:  http://${{ secrets.WEBSHARE_PROXY_USER }}:${{ secrets.WEBSHARE_PROXY_PASS }}@p.webshare.io:80
-          HTTP_PROXY:   http://${{ secrets.WEBSHARE_PROXY_USER }}:${{ secrets.WEBSHARE_PROXY_PASS }}@p.webshare.io:80
+          HTTPS_PROXY:  ${{ env.RESOLVED_PROXY }}
+          HTTP_PROXY:   ${{ env.RESOLVED_PROXY }}
 
           # ── Google Gemini ──────────────────────────────────────────────────
           GEMINI_API_KEY:               ${{ secrets.GEMINI_API_KEY }}
