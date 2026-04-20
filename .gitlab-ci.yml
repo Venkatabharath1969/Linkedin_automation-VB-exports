@@ -1,0 +1,116 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# VB Exports — Daily LinkedIn Carousel Post
+# GitLab CI (GCP runners — different IP from GitHub Actions Azure)
+# ══════════════════════════════════════════════════════════════════════════════
+
+# ── Schedules (set up in GitLab UI: CI/CD → Schedules) ─────────────────────
+# Personal  (Mon/Wed/Fri)  07:00 UTC = 12:30 IST  → variable ACCOUNT=personal
+# Company   (Tue/Thu)      07:30 UTC = 13:00 IST  → variable ACCOUNT=company
+
+workflow:
+  rules:
+    # Run on scheduled pipelines
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+    # Run on manual web triggers
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+    # Run on manual API triggers
+    - if: '$CI_PIPELINE_SOURCE == "api"'
+
+variables:
+  PLAYWRIGHT_BROWSER: chromium
+  # ACCOUNT and DRY_RUN are passed via schedule variables or manually
+  ACCOUNT: "personal"   # default if not overridden
+  DRY_RUN: "false"
+
+post-carousel:
+  image: python:3.11-slim-bookworm
+  timeout: 25 minutes
+
+  before_script:
+    # ── System dependencies ────────────────────────────────────────────────
+    - apt-get update -qq
+    - apt-get install -y -qq
+        poppler-utils libfontconfig1
+        libnss3 libatk1.0-0 libatk-bridge2.0-0
+        libcups2 libdrm2 libxkbcommon0 libxcomposite1
+        libxdamage1 libxfixes3 libxrandr2 libgbm1
+        libasound2 git curl
+
+    # ── Python dependencies ────────────────────────────────────────────────
+    - pip install --quiet -r requirements.txt
+
+    # ── Playwright Chromium ────────────────────────────────────────────────
+    - python -m playwright install-deps chromium
+    - python -m playwright install chromium
+
+    # ── Fonts ──────────────────────────────────────────────────────────────
+    - python setup_fonts.py
+
+    # ── Verify LinkedIn API access from GCP IP ────────────────────────────
+    - |
+      echo "=== GitLab GCP runner IP ==="
+      curl -s https://api.ipify.org
+      echo ""
+      echo "=== Direct LinkedIn /rest/images (no proxy, no token) ==="
+      STATUS=$(curl -s -m 10 -o /dev/null -w "%{http_code}" \
+        -X POST "https://api.linkedin.com/rest/images?action=initializeUpload" \
+        -H "LinkedIn-Version: 202503" -H "Content-Type: application/json" \
+        -d '{"initializeUploadRequest":{"owner":"urn:li:person:test"}}')
+      echo "LinkedIn /rest/images response (no auth): $STATUS"
+      if [ "$STATUS" = "403" ]; then
+        echo "WARNING: GCP IP may be blocked by LinkedIn"
+      elif [ "$STATUS" = "401" ] || [ "$STATUS" = "422" ]; then
+        echo "SUCCESS: LinkedIn endpoint reachable from GCP (needs auth token)"
+      fi
+
+  script:
+    # ── Determine account and dry-run flags ───────────────────────────────
+    - mkdir -p output
+    - |
+      ACCOUNT_FLAG=""
+      if [ -n "$ACCOUNT" ]; then
+        ACCOUNT_FLAG="--account $ACCOUNT"
+      fi
+
+      DRY_FLAG=""
+      if [ "$DRY_RUN" = "true" ]; then
+        DRY_FLAG="--dry-run"
+      fi
+
+      echo "Running: python main.py $ACCOUNT_FLAG $DRY_FLAG"
+      python main.py $ACCOUNT_FLAG $DRY_FLAG 2>&1 | tee output/run_log.txt
+      exit ${PIPESTATUS[0]}
+
+  after_script:
+    - echo "Pipeline complete. Check output/ for generated carousel."
+
+  artifacts:
+    name: "carousel-output-$CI_PIPELINE_IID"
+    when: always
+    expire_in: 14 days
+    paths:
+      - output/
+
+  # ── Environment variables (from GitLab CI/CD → Variables) ────────────────
+  variables:
+    LINKEDIN_ACCESS_TOKEN:      $LINKEDIN_ACCESS_TOKEN
+    LINKEDIN_PERSON_URN:        $LINKEDIN_PERSON_URN
+    LINKEDIN_ORG_URN:           $LINKEDIN_ORG_URN
+    LINKEDIN_MEMBER_URN:        $LINKEDIN_MEMBER_URN
+    LINKEDIN_CLIENT_ID:         $LINKEDIN_CLIENT_ID
+    GEMINI_API_KEY:             $GEMINI_API_KEY
+    GOOGLE_SHEET_ID:            $GOOGLE_SHEET_ID
+    GOOGLE_SHEETS_CREDS:        $GOOGLE_SHEETS_CREDS
+    PERSONAL_FACEBOOK_PAGE_ID:  $PERSONAL_FACEBOOK_PAGE_ID
+    PERSONAL_FACEBOOK_TOKEN:    $PERSONAL_FACEBOOK_TOKEN
+    PERSONAL_INSTAGRAM_USER_ID: $PERSONAL_INSTAGRAM_USER_ID
+    FACEBOOK_PAGE_ID:           $FACEBOOK_PAGE_ID
+    FACEBOOK_ACCESS_TOKEN:      $FACEBOOK_ACCESS_TOKEN
+    INSTAGRAM_USER_ID:          $INSTAGRAM_USER_ID
+    CLOUDINARY_CLOUD_NAME:      $CLOUDINARY_CLOUD_NAME
+    CLOUDINARY_API_KEY:         $CLOUDINARY_API_KEY
+    CLOUDINARY_API_SECRET:      $CLOUDINARY_API_SECRET
+    PEXELS_API_KEY:             $PEXELS_API_KEY
+    GNEWS_API_KEY:              $GNEWS_API_KEY
+    DATA_GOV_API_KEY:           $DATA_GOV_API_KEY
+    PLAYWRIGHT_BROWSER:         chromium
