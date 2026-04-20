@@ -1,19 +1,20 @@
-"""
+﻿"""
 publishers/linkedin_publisher.py
 ──────────────────────────────────
 Posts carousel slides to LinkedIn via the REST API.
 
-Strategy: multi-image post using individual slide PNGs.
-  - No "Documents API" product approval needed
-  - Only requires w_member_social scope (standard)
-  - LinkedIn allows up to 20 images per post
+Strategy: PDF document post using the Documents API.
+  - Uploads the generated PDF as a LinkedIn Document carousel
+  - Produces the swipeable "Page X of Y" carousel format (not multi-image)
+  - Requires w_member_social (personal) or w_organization_social (company)
+  - Works from GitLab CI GCP runners (confirmed unblocked)
 
 Endpoints used:
-  POST /rest/images?action=initializeUpload  — get upload URL per image
-  PUT  <uploadUrl>                           — binary upload
-  POST /rest/posts                           — create multi-image post
-  GET  /rest/posts?author=<urn>&count=1      — get latest post URN
-  POST /rest/socialActions/<urn>/comments    — post first comment
+  POST /rest/documents?action=initializeUpload  — get upload URL + document URN
+  PUT  <uploadUrl>                              — binary PDF upload
+  POST /rest/posts                              — create document carousel post
+  GET  /rest/posts?author=<urn>&count=1         — get latest post URN
+  POST /rest/socialActions/<urn>/comments       — post first comment
 
 All calls use exponential-backoff retry (3 attempts, skip 4xx except 429).
 """
@@ -28,7 +29,6 @@ from typing import Optional
 
 import requests
 import urllib3
-import os
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 from config import LINKEDIN_API_VERSION, LINKEDIN_AUTHOR_URN, API_MAX_RETRIES, API_INITIAL_DELAY
@@ -45,9 +45,10 @@ def _get_author_urn() -> str:
         or LINKEDIN_AUTHOR_URN
     )
 
+
 log = logging.getLogger(__name__)
 
-BASE    = "https://api.linkedin.com"
+BASE         = "https://api.linkedin.com"
 HEADERS_BASE = {"LinkedIn-Version": LINKEDIN_API_VERSION, "X-Restli-Protocol-Version": "2.0.0"}
 
 
@@ -77,59 +78,8 @@ def _retry(fn, *args, **kwargs):
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# Image upload helpers + multi-image carousel post
+# PDF Document carousel post (Documents API)
 # ══════════════════════════════════════════════════════════════════════════════
-
-def _upload_image(png_path: str, access_token: str, author_urn: str) -> str:
-    """
-    Uploads a single PNG via /rest/images and returns urn:li:image:<id>.
-
-    Requests are routed through the HTTPS_PROXY env var (set to Webshare in
-    GitHub Actions) so LinkedIn's API sees a non-Azure IP.  On local the env
-    var is absent and the direct connection is used.
-    """
-    # Step 1 — initialize upload
-    init_resp = _retry(
-        requests.post,
-        f"{BASE}/rest/images",
-        params={"action": "initializeUpload"},
-        headers={
-            **HEADERS_BASE,
-            "Authorization": f"Bearer {access_token}",
-            "Content-Type": "application/json",
-        },
-        json={"initializeUploadRequest": {"owner": author_urn}},
-        timeout=30,
-        verify=_VERIFY_SSL,
-    )
-    value      = init_resp.json()["value"]
-    upload_url = value["uploadUrl"]
-    image_urn  = value["image"]          # urn:li:image:<id>
-
-    # Step 2 — upload binary (direct to LinkedIn CDN — proxy not needed here)
-    with open(png_path, "rb") as f:
-        img_bytes = f.read()
-    _retry(
-        requests.put,
-        upload_url,
-        data=img_bytes,
-        headers={"Content-Type": "application/octet-stream"},
-        timeout=120,
-        verify=_VERIFY_SSL,
-    )
-    log.info("  Uploaded %s (%d KB) → %s",
-             pathlib.Path(png_path).name, len(img_bytes) // 1024, image_urn)
-    return image_urn
-
-
-def _find_slide_pngs(pdf_path: str) -> list[str]:
-    """Finds sorted slide PNGs in the same output dir as the PDF."""
-    output_dir = pathlib.Path(pdf_path).parent
-    pngs = sorted(output_dir.glob("slide_*.png"))
-    if not pngs:
-        log.warning("No slide PNGs found in %s", output_dir)
-    return [str(p) for p in pngs]
-
 
 def post_document(
     caption: str,
@@ -138,9 +88,15 @@ def post_document(
     author_urn: Optional[str] = None,
 ) -> str:
     """
-    Uploads slide PNGs via /rest/images and creates a multi-image carousel
-    post via /rest/posts.  Both calls are automatically routed through the
-    HTTPS_PROXY env var (Webshare) when running on GitHub Actions.
+    Uploads the PDF via /rest/documents and creates a LinkedIn Document
+    carousel post — the swipeable "Page X of Y" format visible on mobile
+    and desktop, with download option for viewers.
+
+    Flow:
+      1. POST /rest/documents?action=initializeUpload  -> uploadUrl + document URN
+      2. PUT  <uploadUrl>  with raw PDF bytes
+      3. Wait for LinkedIn CDN to process PDF into carousel pages
+      4. POST /rest/posts  with content.media.id = document URN
 
     Returns the created post URN.
     """
@@ -148,40 +104,56 @@ def post_document(
     if not urn:
         raise ValueError("LinkedIn author URN not configured (LINKEDIN_PERSON_URN or LINKEDIN_ORG_URN)")
 
-    slide_pngs = _find_slide_pngs(pdf_path)
-    if not slide_pngs:
-        raise RuntimeError(f"No slide PNGs found alongside {pdf_path}")
+    pdf_file = pathlib.Path(pdf_path)
+    if not pdf_file.exists():
+        raise RuntimeError(f"PDF not found: {pdf_path}")
 
-    log.info("Uploading %d slide images via /rest/images (author: %s)…",
-             len(slide_pngs), urn)
-    image_urns: list[str] = []
-    for i, png in enumerate(slide_pngs, 1):
-        log.info("  Slide %d/%d", i, len(slide_pngs))
-        image_urns.append(_upload_image(png, access_token, urn))
+    pdf_size_mb = pdf_file.stat().st_size / (1024 * 1024)
+    log.info("Uploading PDF carousel via Documents API | author=%s | file=%s (%.2f MB)",
+             urn, pdf_file.name, pdf_size_mb)
 
-    from config import API_CDN_WAIT_SECONDS
-    log.info("Waiting %ds for CDN propagation…", API_CDN_WAIT_SECONDS)
-    time.sleep(API_CDN_WAIT_SECONDS)
-
-    rest_headers = {
+    api_headers = {
         **HEADERS_BASE,
         "Authorization": f"Bearer {access_token}",
-        "Content-Type": "application/json",
+        "Content-Type":  "application/json",
     }
 
-    content = (
-        {"media": {"id": image_urns[0], "altText": "Carousel slide 1"}}
-        if len(image_urns) == 1
-        else {
-            "multiImage": {
-                "images": [
-                    {"id": u, "altText": f"Slide {i + 1}"}
-                    for i, u in enumerate(image_urns)
-                ]
-            }
-        }
+    # Step 1 — initialize document upload
+    init_resp = _retry(
+        requests.post,
+        f"{BASE}/rest/documents",
+        params={"action": "initializeUpload"},
+        headers=api_headers,
+        json={"initializeUploadRequest": {"owner": urn}},
+        timeout=30,
+        verify=_VERIFY_SSL,
     )
+    value        = init_resp.json()["value"]
+    upload_url   = value["uploadUrl"]
+    document_urn = value["document"]   # urn:li:document:<id>
+    log.info("  Document URN: %s", document_urn)
 
+    # Step 2 — upload PDF binary
+    with open(pdf_path, "rb") as f:
+        pdf_bytes = f.read()
+    _retry(
+        requests.put,
+        upload_url,
+        data=pdf_bytes,
+        headers={"Authorization": f"Bearer {access_token}",
+                 "Content-Type": "application/octet-stream"},
+        timeout=180,
+        verify=_VERIFY_SSL,
+    )
+    log.info("  PDF uploaded (%d KB)", len(pdf_bytes) // 1024)
+
+    # Step 3 — wait for LinkedIn CDN to process the PDF into carousel pages
+    from config import API_CDN_WAIT_SECONDS
+    wait = max(API_CDN_WAIT_SECONDS, 10)   # PDF processing needs at least 10s
+    log.info("Waiting %ds for document CDN processing...", wait)
+    time.sleep(wait)
+
+    # Step 4 — create the document carousel post
     body = {
         "author":     urn,
         "commentary": caption,
@@ -191,22 +163,27 @@ def post_document(
             "targetEntities": [],
             "thirdPartyDistributionChannels": [],
         },
-        "content":        content,
+        "content": {
+            "media": {
+                "title": pdf_file.name,
+                "id":    document_urn,
+            }
+        },
         "lifecycleState": "PUBLISHED",
         "isReshareDisabledByAuthor": False,
     }
 
-    log.info("Posting via /rest/posts | author=%s | slides=%d", urn, len(image_urns))
+    log.info("Posting document carousel | author=%s", urn)
     resp = _retry(
         requests.post,
         f"{BASE}/rest/posts",
-        headers=rest_headers,
+        headers=api_headers,
         json=body,
         timeout=30,
         verify=_VERIFY_SSL,
     )
     post_urn = resp.headers.get("x-restli-id", "")
-    log.info("LinkedIn carousel post created: %s", post_urn)
+    log.info("LinkedIn document carousel posted: %s", post_urn)
     return post_urn
 
 
@@ -244,14 +221,8 @@ def post_first_comment(
     author_urn: Optional[str] = None,
 ) -> bool:
     """
-    Posts a first comment on the latest LinkedIn post.
+    Posts a first comment on the LinkedIn post.
     Returns True on success.
-
-    Args:
-        comment_text : The comment to post
-        access_token : LinkedIn OAuth token
-        post_urn     : URN of the specific post (from post_document return value)
-        author_urn   : Override author; defaults to config.LINKEDIN_AUTHOR_URN
     """
     urn = author_urn or _get_author_urn()
     if not post_urn:
@@ -279,6 +250,7 @@ def post_first_comment(
             headers=headers,
             json={
                 "actor":   urn,
+                "object":  encoded_urn,
                 "message": {"text": comment_text},
             },
             timeout=20,
